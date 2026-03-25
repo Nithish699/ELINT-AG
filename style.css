@@ -236,12 +236,23 @@ html, body {
 }
 
 .panel-section {
-  border-bottom: 1px solid var(--border);
   padding: 12px;
   display: flex; flex-direction: column;
 }
 
-.panel-section.flex-1 { flex: 1; min-height:0; }
+#panel-splitter {
+  height: 6px;
+  background: rgba(0,255,65,0.1);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  cursor: ns-resize;
+  transition: background 0.2s;
+}
+#panel-splitter:hover, #panel-splitter.active {
+  background: rgba(0,255,65,0.4);
+}
+
+.panel-section.flex-1 { flex: 1; min-height:100px; overflow:hidden; }
 
 .panel-heading {
   font-family: var(--font-disp);
@@ -251,6 +262,7 @@ html, body {
   margin-bottom: 10px;
   display: flex;
   justify-content: space-between;
+  align-items: center;
 }
 
 .badge-green { color: var(--green); text-shadow: 0 0 5px var(--green); }
@@ -262,7 +274,6 @@ html, body {
   padding: 8px;
   font-size: 11px;
   overflow-y: auto;
-  height: 160px; /* fixed height for top log */
 }
 
 .data-list {

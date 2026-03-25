@@ -34,6 +34,8 @@
     <button class="tool-btn" id="btn-radar" onclick="setMode('radar')">📡 ADD THREAT RADAR</button>
     <button class="tool-btn amber" id="btn-emitter" onclick="setMode('emitter')">⚡ MARK UNKNOWN EMITTER</button>
     <div class="sep"></div>
+    <button class="tool-btn" id="btn-library" onclick="openLibrary()">🗃️ THREAT LIBRARY <span id="lib-count" style="color:var(--cyan)">[0]</span></button>
+    <div class="sep"></div>
     <button class="tool-btn cyan" id="btn-route" onclick="setMode('route')">✈ DRAW FLIGHT ROUTE</button>
     <button class="tool-btn cyan" id="btn-clear-route" onclick="clearRoute()">✕ CLEAR ROUTE</button>
     <div class="sep"></div>
@@ -55,7 +57,7 @@
   <!-- RIGHT PANELS -->
   <aside id="right-panel">
 
-    <div class="panel-section">
+    <div id="panel-top" class="panel-section" style="height:50%; min-height:100px;">
       <div class="panel-heading">
         <span>▶ ELINT COLLECTION LOG</span>
         <button class="tool-btn" style="padding:2px 6px; font-size:9px" onclick="clearLogs()">✕ CLEAR</button>
@@ -67,20 +69,13 @@
       </div>
     </div>
 
-    <div class="panel-section">
+    <!-- DRAG SPLITTER -->
+    <div id="panel-splitter"></div>
+
+    <div id="panel-bottom" class="panel-section flex-1" style="overflow:hidden;">
       <div class="panel-heading">▶ SIGNAL INTERCEPTS THIS SORTIE</div>
       <div id="collected-signals" class="data-list">
         <div class="empty-msg">— NO SIGNALS ACQUIRED YET —</div>
-      </div>
-    </div>
-
-    <div class="panel-section flex-1">
-      <div class="panel-heading">
-        <span>▶ THREAT LIBRARY <span id="lib-count" class="badge-green">[0]</span></span>
-        <button class="tool-btn" style="padding:2px 6px; font-size:9px" onclick="openLibrary()">⤢ VIEW ALL</button>
-      </div>
-      <div id="threat-list" class="data-list">
-        <div class="empty-msg">— LIBRARY EMPTY —</div>
       </div>
     </div>
 
@@ -153,7 +148,6 @@
             <select id="f-pattern">
               <option>Circular</option>
               <option>Sector</option>
-              <option>Conical</option>
               <option selected>Phased Array (AESA)</option>
             </select>
           </div>
@@ -195,6 +189,7 @@
               <th style="padding:12px;">PRF (Hz)</th>
               <th style="padding:12px;">PW (μs)</th>
               <th style="padding:12px;">RANGE</th>
+              <th style="padding:12px; text-align:center;">ACTION</th>
             </tr>
           </thead>
           <tbody id="library-table-body">

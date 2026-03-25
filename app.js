@@ -9,6 +9,8 @@ let radars = [];       // Known Threat Library
 let emitters = [];     // Unknown Entities
 let routeLatLngs = []; // Jet Route Waypoints [L.LatLng]
 let pendingLatLng = null; // Stored when modal opens
+let editingRadarIdx = null; // Track iteration index when editing
+let editingEmitterIdx = null; // Track iteration index when editing/upgrading emitter
 
 let missionRunning = false;
 let missionFrame = null;
@@ -19,6 +21,7 @@ let jetAngle = 0;
 let collectedSignals = [];
 let radarAngles = {}; // Current sweep angle per radar index
 let emitterCounter = 1;
+let activeDetections = []; // Array of LatLng for drawing active tracking links
 
 // Colors
 const GLOW_GREEN = 'rgba(0, 255, 65, 0.8)';
@@ -75,8 +78,41 @@ function init() {
   setInterval(updateClock, 1000);
   updateClock();
 
+  // Splitter Setup
+  initSplitter();
+
   // Start Background Animation Loop for Sweeps
   requestAnimationFrame(animLoop);
+}
+
+function initSplitter() {
+  const splitter = document.getElementById('panel-splitter');
+  let isDragging = false;
+  
+  splitter.addEventListener('mousedown', function(e) {
+    isDragging = true;
+    splitter.classList.add('active');
+    document.body.style.cursor = 'ns-resize';
+  });
+  
+  window.addEventListener('mousemove', function(e) {
+    if (!isDragging) return;
+    const rightPanelTop = document.getElementById('right-panel').getBoundingClientRect().top;
+    const maxH = document.getElementById('right-panel').clientHeight;
+    
+    // Calculate new height percentage
+    let newHeight = e.clientY - rightPanelTop;
+    if (newHeight < 100) newHeight = 100; // min height
+    if (newHeight > maxH - 100) newHeight = maxH - 100; // max height
+    
+    document.getElementById('panel-top').style.height = `${newHeight}px`;
+  });
+  
+  window.addEventListener('mouseup', function() {
+    isDragging = false;
+    splitter.classList.remove('active');
+    document.body.style.cursor = 'default';
+  });
 }
 
 function resizeCanvas() {
@@ -122,6 +158,7 @@ function onMapClick(e) {
 
   if (mode === 'radar') {
     pendingLatLng = latlng;
+    editingRadarIdx = null;
     showModal();
   } else if (mode === 'emitter') {
     addEmitter(latlng);
@@ -138,19 +175,17 @@ function onMapClick(e) {
 function showModal() {
   document.getElementById('modal-overlay').classList.add('show');
   
-  // Randomize realistic seed values
-  document.getElementById('f-name').value = '';
-  document.getElementById('f-freq').value = Math.floor(Math.random() * 4000 + 1000);
-  document.getElementById('f-pri').value = Math.floor(Math.random() * 1000 + 500);
-  document.getElementById('f-prf').value = Math.floor(1000000 / parseInt(document.getElementById('f-pri').value));
-  document.getElementById('f-pw').value = (Math.random() * 8 + 2).toFixed(1);
-  document.getElementById('f-scan').value = Math.floor(Math.random() * 15 + 5);
-  document.getElementById('f-range').value = Math.floor(Math.random() * 300 + 100);
+  // Randomize realistic seed values only if it's a new entry
+  if (editingRadarIdx === null) {
+    randomizeModal();
+  }
 }
 
 function closeModal() {
   document.getElementById('modal-overlay').classList.remove('show');
   pendingLatLng = null;
+  editingRadarIdx = null;
+  editingEmitterIdx = null;
 }
 
 function randomizeModal() {
@@ -172,11 +207,8 @@ function randomizeModal() {
 }
 
 function confirmAddRadar() {
-  if (!pendingLatLng) return;
-
   const name = document.getElementById('f-name').value.trim() || `UNKNOWN SYSTEM - ${radars.length + 1}`;
   const radar = {
-    latlng: pendingLatLng,
     name: name,
     freq: parseFloat(document.getElementById('f-freq').value) || 3000,
     band: document.getElementById('f-band').value,
@@ -186,15 +218,38 @@ function confirmAddRadar() {
     scanRate: parseFloat(document.getElementById('f-scan').value) || 12,
     rangeKm: parseFloat(document.getElementById('f-range').value) || 400,
     pattern: document.getElementById('f-pattern').value,
-    cat: document.getElementById('f-cat').value
+    cat: document.getElementById('f-cat').value,
+    bearing: Math.random() * Math.PI * 2
   };
 
-  radars.push(radar);
-  radarAngles[radars.length - 1] = 0;
+  if (editingRadarIdx !== null) {
+    // Editing an existing radar, preserve LatLng and Angle
+    radar.latlng = radars[editingRadarIdx].latlng;
+    if (radars[editingRadarIdx].bearing !== undefined) radar.bearing = radars[editingRadarIdx].bearing;
+    radars[editingRadarIdx] = radar;
+    addLog(`RADAR SIGNATURE UPDATED: ${name}`, 'match');
+    editingRadarIdx = null;
+  } else if (editingEmitterIdx !== null) {
+    // Upgrading an Unknown Emitter to a fully characterized Radar Threat
+    radar.latlng = emitters[editingEmitterIdx].latlng;
+    radars.push(radar);
+    radarAngles[radars.length - 1] = 0;
+    
+    const oldId = emitters[editingEmitterIdx].id.toString().padStart(2,'0');
+    emitters.splice(editingEmitterIdx, 1);
+    
+    addLog(`UNKN-${oldId} IDENTIFIED & CATALOGED AS: ${name}`, 'match');
+    editingEmitterIdx = null;
+  } else {
+    if (!pendingLatLng) return;
+    radar.latlng = pendingLatLng;
+    radars.push(radar);
+    radarAngles[radars.length - 1] = 0;
+    addLog(`RADAR ADDED: ${name} ALIGNED TO DB`, 'match');
+  }
 
   document.getElementById('radar-count').textContent = radars.length;
   updateThreatLibraryUI();
-  addLog(`RADAR ADDED: ${name} ALIGNED TO DB`, 'match');
   
   closeModal();
   drawCanvas();
@@ -242,24 +297,8 @@ function clearLogs() {
 }
 
 function updateThreatLibraryUI() {
-  const list = document.getElementById('threat-list');
-  document.getElementById('lib-count').textContent = `[${radars.length}]`;
-  
-  if (radars.length === 0) {
-    list.innerHTML = '<div class="empty-msg">— LIBRARY EMPTY —</div>';
-    return;
-  }
-
-  list.innerHTML = radars.map(r => `
-    <div class="threat-card card-known">
-      <div class="t-title">◈ ${r.name}</div>
-      <div class="t-details">
-        > TYPE: ${r.cat} | BAND: ${r.band.split(' ')[0]}<br>
-        > RANGE: ${r.rangeKm}km | PATTERN: ${r.pattern}<br>
-        > FREQ: ${r.freq}MHz | PRI: ${r.pri}μs
-      </div>
-    </div>
-  `).join('');
+  const cntSpan = document.getElementById('lib-count');
+  if (cntSpan) cntSpan.textContent = `[${radars.length + emitters.length}]`;
 }
 
 function openLibrary() {
@@ -267,23 +306,99 @@ function openLibrary() {
   overlay.style.display = 'flex';
   const tbody = document.getElementById('library-table-body');
   
-  if (radars.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="8" style="padding:24px; text-align:center; color:var(--green-dim); font-style:italic;">— NO THREATS REGISTERED IN DATABASE —</td></tr>';
+  if (radars.length === 0 && emitters.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="9" style="padding:24px; text-align:center; color:var(--green-dim); font-style:italic;">— NO THREATS REGISTERED IN DATABASE —</td></tr>';
     return;
   }
 
-  tbody.innerHTML = radars.map(r => `
-    <tr style="border-bottom:1px solid rgba(0,255,65,0.1); background:rgba(0,255,65,0.02); transition:all 0.2s;">
-      <td style="padding:12px; color:var(--green); font-weight:bold;">${r.name}</td>
-      <td style="padding:12px; color:var(--green-dim);">${r.cat}</td>
-      <td style="padding:12px;">${r.freq}</td>
-      <td style="padding:12px; color:var(--green-dim);">${r.band.split(' ')[0]}</td>
-      <td style="padding:12px;">${r.pri}</td>
-      <td style="padding:12px;">${r.prf}</td>
-      <td style="padding:12px;">${r.pw}</td>
-      <td style="padding:12px; color:var(--cyan);">${r.rangeKm}km</td>
-    </tr>
-  `).join('');
+  let htmlRows = "";
+
+  if (radars.length > 0) {
+    htmlRows += radars.map((r, i) => `
+      <tr style="border-bottom:1px solid rgba(0,255,65,0.1); background:rgba(0,255,65,0.02); transition:all 0.2s;">
+        <td style="padding:12px; color:var(--green); font-weight:bold;">${r.name}</td>
+        <td style="padding:12px; color:var(--green-dim);">${r.cat}</td>
+        <td style="padding:12px;">${r.freq}</td>
+        <td style="padding:12px; color:var(--green-dim);">${r.band.split(' ')[0]}</td>
+        <td style="padding:12px;">${r.pri}</td>
+        <td style="padding:12px;">${r.prf}</td>
+        <td style="padding:12px;">${r.pw}</td>
+        <td style="padding:12px; color:var(--cyan);">${r.rangeKm}km</td>
+        <td style="padding:12px; text-align:center; min-width:80px;">
+          <button class="tool-btn" style="padding:4px 8px; font-size:9px;" onclick="editRadar(${i})">✎</button>
+          <button class="tool-btn red" style="padding:4px 8px; font-size:9px;" onclick="deleteRadar(${i})">✕</button>
+        </td>
+      </tr>
+    `).join('');
+  }
+
+  if (emitters.length > 0) {
+    htmlRows += emitters.map((e) => `
+      <tr style="border-bottom:1px solid rgba(255,170,0,0.2); background:rgba(255,170,0,0.05);">
+        <td style="padding:12px; color:var(--amber); font-weight:bold;">UNKN-${e.id.toString().padStart(2,'0')}</td>
+        <td style="padding:12px; color:var(--amber);">UNCHARACTERIZED</td>
+        <td style="padding:12px; color:var(--amber); opacity:0.6;">*VARIES*</td>
+        <td style="padding:12px; color:var(--amber); opacity:0.6;">*UNKNOWN*</td>
+        <td style="padding:12px; color:var(--amber); opacity:0.6;">*VARIES*</td>
+        <td style="padding:12px; color:var(--amber); opacity:0.6;">*VARIES*</td>
+        <td style="padding:12px; color:var(--amber); opacity:0.6;">*VARIES*</td>
+        <td style="padding:12px; color:var(--amber); opacity:0.6;">*ESTIMATED*</td>
+        <td style="padding:12px; text-align:center; min-width:80px;">
+          <button class="tool-btn" style="padding:4px 10px; font-size:9px;" onclick="editEmitter(${i})">✎ EDIT</button>
+          <button class="tool-btn red" style="padding:4px 8px; font-size:9px;" onclick="deleteEmitter(${i})">✕</button>
+        </td>
+      </tr>
+    `).join('');
+  }
+
+  tbody.innerHTML = htmlRows;
+}
+
+function editRadar(idx) {
+  closeLibrary();
+  editingRadarIdx = idx;
+  const r = radars[idx];
+  
+  document.getElementById('modal-overlay').classList.add('show');
+  
+  document.getElementById('f-name').value = r.name;
+  document.getElementById('f-freq').value = r.freq;
+  document.getElementById('f-band').value = r.band;
+  document.getElementById('f-pri').value = r.pri;
+  document.getElementById('f-prf').value = r.prf;
+  document.getElementById('f-pw').value = r.pw;
+  document.getElementById('f-scan').value = r.scanRate;
+  document.getElementById('f-range').value = r.rangeKm;
+  document.getElementById('f-pattern').value = r.pattern;
+  document.getElementById('f-cat').value = r.cat;
+}
+
+function editEmitter(idx) {
+  closeLibrary();
+  editingEmitterIdx = idx;
+  const e = emitters[idx];
+  
+  document.getElementById('modal-overlay').classList.add('show');
+  randomizeModal(); 
+  document.getElementById('f-name').value = `UNKN-${e.id.toString().padStart(2,'0')} UPGRADE`;
+}
+
+function deleteRadar(idx) {
+  if(confirm(`Purge Threat Signature: ${radars[idx].name}?`)) {
+    radars.splice(idx, 1);
+    updateThreatLibraryUI();
+    openLibrary(); 
+    drawCanvas();
+  }
+}
+
+function deleteEmitter(idx) {
+  if(confirm(`Purge Unknown Emitter UNKN-${emitters[idx].id.toString().padStart(2,'0')}?`)) {
+    emitters.splice(idx, 1);
+    updateThreatLibraryUI();
+    openLibrary();
+    drawCanvas();
+  }
 }
 
 function closeLibrary() {
@@ -354,6 +469,26 @@ function drawCanvas() {
 
   // 4. Draw Jet
   if (jetPosLatLng) drawJet();
+
+  // 5. Draw Active Detection Links
+  if (jetPosLatLng && activeDetections.length > 0) {
+    const jPt = map.latLngToContainerPoint(jetPosLatLng);
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 4]);
+    activeDetections.forEach(ll => {
+      const tgPt = map.latLngToContainerPoint(ll);
+      ctx.beginPath();
+      ctx.moveTo(jPt.x, jPt.y);
+      ctx.lineTo(tgPt.x, tgPt.y);
+      
+      const grad = ctx.createLinearGradient(jPt.x, jPt.y, tgPt.x, tgPt.y);
+      grad.addColorStop(0, 'rgba(0, 212, 255, 0.8)');
+      grad.addColorStop(1, 'rgba(0, 255, 65, 0)');
+      ctx.strokeStyle = grad;
+      ctx.stroke();
+    });
+    ctx.setLineDash([]);
+  }
 }
 
 function drawRadar(r, idx) {
@@ -363,9 +498,23 @@ function drawRadar(r, idx) {
 
   const radiusPx = getRadiusPx(r.rangeKm, r.latlng);
 
-  // Range Ring
+  // Range Ring / Sector Slice
   ctx.beginPath();
-  ctx.arc(pt.x, pt.y, radiusPx, 0, Math.PI * 2);
+  if (r.pattern === 'Sector') {
+    // Draw a pie slice roughly representing the 180 deg frontal sector
+    const b = r.bearing || 0;
+    ctx.moveTo(pt.x, pt.y);
+    ctx.arc(pt.x, pt.y, radiusPx, b - 1.6, b + 1.6);
+    ctx.lineTo(pt.x, pt.y);
+    
+    // Slight fill to show the locked sector zone
+    ctx.fillStyle = 'rgba(0, 255, 65, 0.03)';
+    ctx.fill();
+  } else {
+    // Standard full circle
+    ctx.arc(pt.x, pt.y, radiusPx, 0, Math.PI * 2);
+  }
+  
   ctx.strokeStyle = DIM_GREEN;
   ctx.lineWidth = 1.5;
   ctx.stroke();
@@ -445,10 +594,10 @@ function drawJet() {
   ctx.rotate(jetAngle); // Use simple screen angle (radians)
 
   // Sensor Collection Cone (spread facing forward)
-  const conePx = 60; // Reduced size for cleaner UI
+  const conePx = 50; // Scaled down for a more realistic medium size
   ctx.beginPath();
   ctx.moveTo(0, 0);
-  ctx.arc(0, 0, conePx, -0.4, 0.4);
+  ctx.arc(0, 0, conePx, -0.6, 0.6);
   ctx.closePath();
   ctx.fillStyle = 'rgba(0, 212, 255, 0.08)';
   ctx.fill();
@@ -457,12 +606,12 @@ function drawJet() {
   ctx.stroke();
 
   // Jet Body
-  ctx.shadowBlur = 15; ctx.shadowColor = CYAN; ctx.fillStyle = CYAN;
+  ctx.shadowBlur = 10; ctx.shadowColor = CYAN; ctx.fillStyle = CYAN;
   ctx.beginPath();
-  ctx.moveTo(10, 0);
-  ctx.lineTo(-8, -6);
-  ctx.lineTo(-4, 0);
-  ctx.lineTo(-8, 6);
+  ctx.moveTo(6, 0);
+  ctx.lineTo(-5, -4);
+  ctx.lineTo(-3, 0);
+  ctx.lineTo(-5, 4);
   ctx.closePath();
   ctx.fill();
 
@@ -470,12 +619,34 @@ function drawJet() {
 }
 
 function animLoop() {
+  const t = Date.now() / 1000; // Shared timestamp in seconds
+
   // Update Sweep angles
   radars.forEach((r, i) => {
-    // scanRate is RPM. rad/sec = scanRate * 2PI / 60
-    // roughly 16ms per frame -> angle delta = (rad/sec) * 0.016
     const rpmRadSec = (r.scanRate * Math.PI * 2) / 60;
-    radarAngles[i] = ((radarAngles[i] || 0) + rpmRadSec * 0.016) % (Math.PI * 2);
+
+    if (r.pattern === 'Sector') {
+      // Sweeps back and forth through a 120-degree wedge (e.g. fire control tracking)
+      const b = r.bearing || 0;
+      const sweepSpeed = rpmRadSec; 
+      // Swing +/- 1.5 rad around the assigned bearing
+      radarAngles[i] = b + Math.sin(t * sweepSpeed) * 1.5; 
+    } 
+    else if (r.pattern === 'Phased Array (AESA)') {
+      // Does not use a rotating physical dish. It electronically jumps the beam instantly.
+      // E.g. Patriots and S-400s stare at a sector and rapid-pulse sectors.
+      // We will make it randomly jump to a new 0-2PI quadrant every few frames based on scan Rate
+      const jumpInterval = Math.max(0.1, 10 / r.scanRate); 
+      // Seed random based on timestamp floored to interval
+      const seed = Math.floor(t / jumpInterval) + i; 
+      // Simple pseudo random hash
+      const randomRad = ((seed * 9301 + 49297) % 233280) / 233280; 
+      radarAngles[i] = randomRad * Math.PI * 2;
+    } 
+    else {
+      // Default / Circular: Smooth 360 spin
+      radarAngles[i] = ((radarAngles[i] || 0) + rpmRadSec * 0.016) % (Math.PI * 2);
+    }
   });
 
   drawCanvas();
@@ -490,9 +661,13 @@ function launchSortie() {
   if (missionRunning) return;
   if (routeLatLngs.length < 2) { addLog('⚠ ERROR: INSUFFICIENT WAYPOINTS', 'alert'); return; }
   
+  setMode('pan'); // Switch mode before setting missionRunning to allow canvas click/drag handling to unlock
   missionRunning = true;
+  map.getContainer().style.cursor = 'grab'; // Ensure grab cursor is active
+  
   missionProgress = 0;
   collectedSignals = [];
+  activeDetections = [];
   document.getElementById('collected-signals').innerHTML = '';
   document.getElementById('collected-count').textContent = '0';
   document.getElementById('collect-bar').style.width = '0%';
@@ -547,28 +722,74 @@ function launchSortie() {
     jetPosLatLng = L.latLng(lat, lng);
 
     // Calculate Jet Angle (bearing as rads for canvas)
-    // Map screen projection:
     const pF = map.latLngToContainerPoint(currSeg.from);
     const pT = map.latLngToContainerPoint(currSeg.to);
     jetAngle = Math.atan2(pT.y - pF.y, pT.x - pF.x);
+    
+    const jPt = map.latLngToContainerPoint(jetPosLatLng); // Jet current screen coord
 
-    // Optionally pan map slowly with jet
-    // map.panTo(jetPosLatLng, {animate: true, duration: 0.2});
-
-    // Intersection Logic
+    // Intersection Logic: Screen-space pixel map bounds
     radars.forEach((r, i) => {
       if (detectedRadars.has(i)) return;
-      if (jetPosLatLng.distanceTo(r.latlng)/1000 < COLLECTION_RANGE_KM) {
-        detectedRadars.add(i);
-        interceptRadar(r);
+      
+      const rPt = map.latLngToContainerPoint(r.latlng);
+      const rRadiusPx = getRadiusPx(r.rangeKm, r.latlng);
+      const cPx = 50; // Jet cone length
+      
+      const distPx = Math.sqrt(Math.pow(rPt.x - jPt.x, 2) + Math.pow(rPt.y - jPt.y, 2));
+
+      // 1. MUST overlap on canvas
+      if (distPx <= rRadiusPx + cPx) {
+        let isInsideRadarCoverage = true;
+        
+        // 2. If it's a SECTOR radar, Jet MUST overlap the pie-slice wedge
+        if (r.pattern === 'Sector') {
+           const angleJetFromRadar = Math.atan2(jPt.y - rPt.y, jPt.x - rPt.x);
+           const b = r.bearing || 0;
+           let rDiff = angleJetFromRadar - b;
+           while (rDiff > Math.PI) rDiff -= Math.PI * 2;
+           while (rDiff < -Math.PI) rDiff += Math.PI * 2;
+           if (Math.abs(rDiff) > 1.6) {
+             isInsideRadarCoverage = false;
+           }
+        }
+        
+        if (isInsideRadarCoverage) {
+          // 3. Radar MUST be inside the Jet's forward detection cone
+          const angleToTarget = Math.atan2(rPt.y - jPt.y, rPt.x - jPt.x);
+          
+          let diff = angleToTarget - jetAngle;
+          while (diff > Math.PI) diff -= Math.PI * 2;
+          while (diff < -Math.PI) diff += Math.PI * 2;
+          
+          if (Math.abs(diff) <= 0.6) {
+            detectedRadars.add(i);
+            interceptRadar(r);
+          }
+        }
       }
     });
 
     emitters.forEach((e, i) => {
       if (detectedEmitters.has(i)) return;
-      if (jetPosLatLng.distanceTo(e.latlng)/1000 < COLLECTION_RANGE_KM) {
-        detectedEmitters.add(i);
-        interceptEmitter(e);
+      
+      const ePt = map.latLngToContainerPoint(e.latlng);
+      const eRadiusPx = getRadiusPx(150, e.latlng); // Unknown emitters estimated at 150km range
+      const cPx = 50; 
+      
+      const distPx = Math.sqrt(Math.pow(ePt.x - jPt.x, 2) + Math.pow(ePt.y - jPt.y, 2));
+
+      if (distPx <= eRadiusPx + cPx) {
+        const angleToTarget = Math.atan2(ePt.y - jPt.y, ePt.x - jPt.x);
+        
+        let diff = angleToTarget - jetAngle;
+        while (diff > Math.PI) diff -= Math.PI * 2;
+        while (diff < -Math.PI) diff += Math.PI * 2;
+        
+        if (Math.abs(diff) <= 0.6) {
+          detectedEmitters.add(i);
+          interceptEmitter(e);
+        }
       }
     });
 
@@ -585,6 +806,7 @@ function launchSortie() {
 function interceptRadar(r) {
   const tot = collectedSignals.length + 1;
   collectedSignals.push({ name: r.name, status: 'MATCH' });
+  activeDetections.push(r.latlng);
   
   document.getElementById('collected-count').textContent = tot;
   document.getElementById('collect-bar').style.width = `${Math.min(tot * 10, 100)}%`;
@@ -600,6 +822,7 @@ function interceptRadar(r) {
 function interceptEmitter(e) {
   const tot = collectedSignals.length + 1;
   collectedSignals.push({ id: e.id, status: 'UNKNOWN' });
+  activeDetections.push(e.latlng);
   
   document.getElementById('collected-count').textContent = tot;
   document.getElementById('collect-bar').style.width = `${Math.min(tot * 10, 100)}%`;
@@ -659,6 +882,7 @@ function clearAll() {
   emitterCounter = 1;
   radarAngles = {};
   collectedSignals = [];
+  activeDetections = [];
   
   document.getElementById('radar-count').textContent = '0';
   document.getElementById('emitter-count').textContent = '0';
