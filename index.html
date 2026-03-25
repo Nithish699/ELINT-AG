@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>ELINT SORTIE SIMULATOR — CLASSIFIED</title>
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&family=VT323&display=swap" rel="stylesheet">
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+  <!-- Custom CSS -->
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- NOISE & SCANLINE OVERLAYS -->
+  <div id="crt-scanlines"></div>
+  <div id="crt-noise"></div>
+  <div id="crt-vignette"></div>
+
+  <!-- HEADER -->
+  <header id="header">
+    <div class="logo-sect">
+      <span class="glitch-icon">◈</span>
+      <div class="title">ELINT SORTIE SIMULATOR</div>
+    </div>
+    <div class="status">CLASSIFICATION: TOP SECRET // SIGINT // NOFORN</div>
+    <div id="clock">00:00:00Z</div>
+  </header>
+
+  <!-- TOOLBAR -->
+  <div id="toolbar">
+    <button class="tool-btn active" id="btn-pan" onclick="setMode('pan')">⊕ COMAND PAN</button>
+    <div class="sep"></div>
+    <button class="tool-btn" id="btn-radar" onclick="setMode('radar')">📡 ADD THREAT RADAR</button>
+    <button class="tool-btn amber" id="btn-emitter" onclick="setMode('emitter')">⚡ MARK UNKNOWN EMITTER</button>
+    <div class="sep"></div>
+    <button class="tool-btn cyan" id="btn-route" onclick="setMode('route')">✈ DRAW FLIGHT ROUTE</button>
+    <button class="tool-btn cyan" id="btn-clear-route" onclick="clearRoute()">✕ CLEAR ROUTE</button>
+    <div class="sep"></div>
+    <button class="tool-btn launch-btn" id="btn-launch" onclick="launchSortie()">▶ LAUNCH SORTIE</button>
+    <button class="tool-btn red" id="btn-abort" onclick="abortSortie()" style="display:none">■ ABORT SORTIE</button>
+    <div class="sep"></div>
+    <button class="tool-btn red" onclick="clearAll()">⊗ WIPE ALL DATA</button>
+  </div>
+
+  <!-- SORTIE PROGRESS BAR -->
+  <div id="sortie-progress"><div id="sortie-progress-fill"></div></div>
+
+  <!-- MAP & CANVAS CONTAINER -->
+  <div id="view-container">
+    <div id="leaflet-map"></div>
+    <canvas id="overlay-canvas"></canvas>
+  </div>
+
+  <!-- RIGHT PANELS -->
+  <aside id="right-panel">
+
+    <div class="panel-section">
+      <div class="panel-heading">
+        <span>▶ ELINT COLLECTION LOG</span>
+        <button class="tool-btn" style="padding:2px 6px; font-size:9px" onclick="clearLogs()">✕ CLEAR</button>
+      </div>
+      <div id="elint-log" class="terminal-log">
+        <div class="log-entry system">— SYSTEM ONLINE —</div>
+        <div class="log-entry system">— WAITING FOR TARGET INPUTS —</div>
+        <div class="log-entry system">— AWAITING SORTIE LAUNCH —</div>
+      </div>
+    </div>
+
+    <div class="panel-section">
+      <div class="panel-heading">▶ SIGNAL INTERCEPTS THIS SORTIE</div>
+      <div id="collected-signals" class="data-list">
+        <div class="empty-msg">— NO SIGNALS ACQUIRED YET —</div>
+      </div>
+    </div>
+
+    <div class="panel-section flex-1">
+      <div class="panel-heading">
+        <span>▶ THREAT LIBRARY <span id="lib-count" class="badge-green">[0]</span></span>
+        <button class="tool-btn" style="padding:2px 6px; font-size:9px" onclick="openLibrary()">⤢ VIEW ALL</button>
+      </div>
+      <div id="threat-list" class="data-list">
+        <div class="empty-msg">— LIBRARY EMPTY —</div>
+      </div>
+    </div>
+
+  </aside>
+
+  <!-- STATUS BAR (BOTTOM) -->
+  <footer id="status-bar">
+    <span>SYSTEM MODE: <strong id="mode-display" class="mode-text">PAN</strong></span>
+    <span>RADAR DATA DB: <strong id="radar-count">0</strong></span>
+    <span>UNKNOWN CONTACTS: <strong id="emitter-count">0</strong></span>
+    <span>FLIGHT WAYPOINTS: <strong id="waypoint-count">0</strong></span>
+    <span>SIGNALS CAPTURED: <strong id="collected-count">0</strong></span>
+    <div class="collect-meter"><div class="collect-fill" id="collect-bar" style="width:0%"></div></div>
+  </footer>
+
+  <!-- ROUTE HINT -->
+  <div id="route-hint">FLIGHT PLANNING ACTIVE: CLICK TO ADD WAYPOINTS — RIGHT-CLICK OR ESC TO FINISH</div>
+
+  <!-- MODAL FOR ADDING RADAR -->
+  <div id="modal-overlay">
+    <div id="modal">
+      <div class="modal-header">
+        <h3>◈ CATALOG NEW EMITTER THREAT</h3>
+        <button class="close-btn" onclick="closeModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <button class="tool-btn amber block-btn" style="margin-bottom:16px; height:32px; padding: 4px;" onclick="randomizeModal()">🎲 AUTO-GENERATE REALISTIC VALUES</button>
+        <div class="form-row">
+          <label>SYSTEM DESIGNATION</label>
+          <input type="text" id="f-name" placeholder="e.g. S-400 TRIUMF" />
+        </div>
+        <div class="form-grid">
+          <div class="form-row">
+            <label>FREQUENCY (MHz)</label>
+            <input type="number" id="f-freq" placeholder="9000" />
+          </div>
+          <div class="form-row">
+            <label>BAND</label>
+            <select id="f-band">
+              <option>L-Band (1–2 GHz)</option>
+              <option>S-Band (2–4 GHz)</option>
+              <option>C-Band (4–8 GHz)</option>
+              <option selected>X-Band (8–12 GHz)</option>
+              <option>Ku-Band (12–18 GHz)</option>
+              <option>Ka-Band (26–40 GHz)</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label>PRI (μs)</label>
+            <input type="number" id="f-pri" placeholder="1000" />
+          </div>
+          <div class="form-row">
+            <label>PRF (Hz)</label>
+            <input type="number" id="f-prf" placeholder="1000" />
+          </div>
+          <div class="form-row">
+            <label>PULSE WIDTH (μs)</label>
+            <input type="number" id="f-pw" placeholder="5" />
+          </div>
+          <div class="form-row">
+            <label>SCAN RATE (rpm)</label>
+            <input type="number" id="f-scan" placeholder="12" />
+          </div>
+          <div class="form-row">
+            <label>DETECTION RANGE (km)</label>
+            <input type="number" id="f-range" placeholder="400" />
+          </div>
+          <div class="form-row">
+            <label>SCAN PATTERN</label>
+            <select id="f-pattern">
+              <option>Circular</option>
+              <option>Sector</option>
+              <option>Conical</option>
+              <option selected>Phased Array (AESA)</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <label>THREAT CATEGORY</label>
+          <select id="f-cat">
+            <option>SAM (Surface-to-Air Missile)</option>
+            <option>EWR (Early Warning Radar)</option>
+            <option>FCR (Fire Control Radar)</option>
+            <option>GCI (Ground Control Intercept)</option>
+            <option>AEW (Airborne Early Warning)</option>
+            <option>NAVAL</option>
+          </select>
+        </div>
+        <div class="modal-btns">
+          <button class="tool-btn block-btn" onclick="confirmAddRadar()">✓ COMMIT & DEPLOY</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL FOR EXTENDED THREAT LIBRARY -->
+  <div id="library-overlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.9); z-index:9999; align-items:center; justify-content:center;">
+    <div id="library-modal" style="background:var(--bg-deep); border:1px solid var(--green); width:800px; max-width:95vw; height:80vh; max-height:600px; display:flex; flex-direction:column; border-top:3px solid var(--green); box-shadow:0 0 30px rgba(0,255,65,0.15);">
+      <div class="modal-header">
+        <h3>◈ COMPLETE THREAT LIBRARY SYSTEM</h3>
+        <button class="close-btn" onclick="closeLibrary()">✕</button>
+      </div>
+      <div class="modal-body" style="overflow-y:auto; flex:1; padding:0;">
+        <table id="library-table" style="width:100%; border-collapse:collapse; text-align:left; font-size:12px; font-family:var(--font-mono);">
+          <thead style="background:rgba(0,255,65,0.05); border-bottom:1px solid var(--border); color:var(--green-dim); font-size:10px; letter-spacing:1px;">
+            <tr>
+              <th style="padding:12px;">DESIGNATION</th>
+              <th style="padding:12px;">CAT</th>
+              <th style="padding:12px;">FREQ (MHz)</th>
+              <th style="padding:12px;">BAND</th>
+              <th style="padding:12px;">PRI (μs)</th>
+              <th style="padding:12px;">PRF (Hz)</th>
+              <th style="padding:12px;">PW (μs)</th>
+              <th style="padding:12px;">RANGE</th>
+            </tr>
+          </thead>
+          <tbody id="library-table-body">
+            <!-- populated by JS -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <!-- App JS -->
+  <script src="app.js"></script>
+</body>
+</html>
