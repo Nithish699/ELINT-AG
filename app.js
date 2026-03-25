@@ -776,7 +776,9 @@ function launchSortie() {
       if (detectedEmitters.has(i)) return;
       
       const ePt = map.latLngToContainerPoint(e.latlng);
-      const eRadiusPx = getRadiusPx(150, e.latlng); // Unknown emitters estimated at 150km range
+      // Unknown emitters have no visible tracking radius on the map.
+      // Therefore, the Jet's cone (cPx) must touch the physical point itself.
+      const eRadiusPx = 0; 
       const cPx = 50; 
       
       const distPx = Math.sqrt(Math.pow(ePt.x - jPt.x, 2) + Math.pow(ePt.y - jPt.y, 2));
