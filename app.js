@@ -249,6 +249,7 @@ function confirmAddRadar() {
   }
 
   document.getElementById('radar-count').textContent = radars.length;
+  document.getElementById('emitter-count').textContent = emitters.length; // Ensure this syncs during upgrades
   updateThreatLibraryUI();
   
   closeModal();
@@ -259,6 +260,7 @@ function addEmitter(latlng) {
   const e = { latlng, id: emitterCounter++ };
   emitters.push(e);
   document.getElementById('emitter-count').textContent = emitters.length;
+  updateThreatLibraryUI(); // Ensure Threat Library button counter updates
   
   const formattedCoord = `${Math.abs(latlng.lat).toFixed(2)}°${latlng.lat>0?'N':'S'}, ${Math.abs(latlng.lng).toFixed(2)}°${latlng.lng>0?'E':'W'}`;
   addLog(`UNKNOWN EMITTER DETECTED AT ${formattedCoord}`, 'unknown');
@@ -333,7 +335,7 @@ function openLibrary() {
   }
 
   if (emitters.length > 0) {
-    htmlRows += emitters.map((e) => `
+    htmlRows += emitters.map((e, i) => `
       <tr style="border-bottom:1px solid rgba(255,170,0,0.2); background:rgba(255,170,0,0.05);">
         <td style="padding:12px; color:var(--amber); font-weight:bold;">UNKN-${e.id.toString().padStart(2,'0')}</td>
         <td style="padding:12px; color:var(--amber);">UNCHARACTERIZED</td>
