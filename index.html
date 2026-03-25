@@ -1,15 +1,18 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <title>ELINT SORTIE SIMULATOR — CLASSIFIED</title>
   <!-- Google Fonts -->
-  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&family=VT323&display=swap" rel="stylesheet">
+  <!-- Google Fonts -->
+  <link rel="stylesheet" href="lib/fonts/fonts.css" />
   <!-- Leaflet CSS -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+  <link rel="stylesheet" href="lib/leaflet/leaflet.css" />
   <!-- Custom CSS -->
   <link rel="stylesheet" href="style.css">
 </head>
+
 <body>
 
   <!-- NOISE & SCANLINE OVERLAYS -->
@@ -34,7 +37,8 @@
     <button class="tool-btn" id="btn-radar" onclick="setMode('radar')">📡 ADD THREAT RADAR</button>
     <button class="tool-btn amber" id="btn-emitter" onclick="setMode('emitter')">⚡ MARK UNKNOWN EMITTER</button>
     <div class="sep"></div>
-    <button class="tool-btn" id="btn-library" onclick="openLibrary()">🗃️ THREAT LIBRARY <span id="lib-count" style="color:var(--cyan)">[0]</span></button>
+    <button class="tool-btn" id="btn-library" onclick="openLibrary()">🗃️ THREAT LIBRARY <span id="lib-count"
+        style="color:var(--cyan)">[0]</span></button>
     <div class="sep"></div>
     <button class="tool-btn cyan" id="btn-route" onclick="setMode('route')">✈ DRAW FLIGHT ROUTE</button>
     <button class="tool-btn cyan" id="btn-clear-route" onclick="clearRoute()">✕ CLEAR ROUTE</button>
@@ -46,7 +50,9 @@
   </div>
 
   <!-- SORTIE PROGRESS BAR -->
-  <div id="sortie-progress"><div id="sortie-progress-fill"></div></div>
+  <div id="sortie-progress">
+    <div id="sortie-progress-fill"></div>
+  </div>
 
   <!-- MAP & CANVAS CONTAINER -->
   <div id="view-container">
@@ -88,7 +94,9 @@
     <span>UNKNOWN CONTACTS: <strong id="emitter-count">0</strong></span>
     <span>FLIGHT WAYPOINTS: <strong id="waypoint-count">0</strong></span>
     <span>SIGNALS CAPTURED: <strong id="collected-count">0</strong></span>
-    <div class="collect-meter"><div class="collect-fill" id="collect-bar" style="width:0%"></div></div>
+    <div class="collect-meter">
+      <div class="collect-fill" id="collect-bar" style="width:0%"></div>
+    </div>
   </footer>
 
   <!-- ROUTE HINT -->
@@ -102,7 +110,8 @@
         <button class="close-btn" onclick="closeModal()">✕</button>
       </div>
       <div class="modal-body">
-        <button class="tool-btn amber block-btn" style="margin-bottom:16px; height:32px; padding: 4px;" onclick="randomizeModal()">🎲 AUTO-GENERATE REALISTIC VALUES</button>
+        <button class="tool-btn amber block-btn" style="margin-bottom:16px; height:32px; padding: 4px;"
+          onclick="randomizeModal()">🎲 AUTO-GENERATE REALISTIC VALUES</button>
         <div class="form-row">
           <label>SYSTEM DESIGNATION</label>
           <input type="text" id="f-name" placeholder="e.g. S-400 TRIUMF" />
@@ -171,15 +180,19 @@
   </div>
 
   <!-- MODAL FOR EXTENDED THREAT LIBRARY -->
-  <div id="library-overlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.9); z-index:9999; align-items:center; justify-content:center;">
-    <div id="library-modal" style="background:var(--bg-deep); border:1px solid var(--green); width:800px; max-width:95vw; height:80vh; max-height:600px; display:flex; flex-direction:column; border-top:3px solid var(--green); box-shadow:0 0 30px rgba(0,255,65,0.15);">
+  <div id="library-overlay"
+    style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.9); z-index:9999; align-items:center; justify-content:center;">
+    <div id="library-modal"
+      style="background:var(--bg-deep); border:1px solid var(--green); width:800px; max-width:95vw; height:80vh; max-height:600px; display:flex; flex-direction:column; border-top:3px solid var(--green); box-shadow:0 0 30px rgba(0,255,65,0.15);">
       <div class="modal-header">
         <h3>◈ COMPLETE THREAT LIBRARY SYSTEM</h3>
         <button class="close-btn" onclick="closeLibrary()">✕</button>
       </div>
       <div class="modal-body" style="overflow-y:auto; flex:1; padding:0;">
-        <table id="library-table" style="width:100%; border-collapse:collapse; text-align:left; font-size:12px; font-family:var(--font-mono);">
-          <thead style="background:rgba(0,255,65,0.05); border-bottom:1px solid var(--border); color:var(--green-dim); font-size:10px; letter-spacing:1px;">
+        <table id="library-table"
+          style="width:100%; border-collapse:collapse; text-align:left; font-size:12px; font-family:var(--font-mono);">
+          <thead
+            style="background:rgba(0,255,65,0.05); border-bottom:1px solid var(--border); color:var(--green-dim); font-size:10px; letter-spacing:1px;">
             <tr>
               <th style="padding:12px;">DESIGNATION</th>
               <th style="padding:12px;">CAT</th>
@@ -201,8 +214,9 @@
   </div>
 
   <!-- Leaflet JS -->
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script src="lib/leaflet/leaflet.js"></script>
   <!-- App JS -->
   <script src="app.js"></script>
 </body>
+
 </html>
