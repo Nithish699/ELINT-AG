@@ -41,9 +41,11 @@ function init() {
     attributionControl: false
   });
 
-  // Use CartoDB Dark Matter for the "Realistic World Map" in dark tactical mode
-  const baseTiles = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-    maxZoom: 19
+  // Use Local Offline Tiles (CartoDB Dark Matter downloaded)
+  const baseTiles = L.tileLayer('tiles/{z}/{x}/{y}.png', {
+    maxZoom: 10,
+    minZoom: 0,
+    noWrap: true // Optionally keep map from repeating horizontally if required
   }).addTo(map);
 
   canvas = document.getElementById('overlay-canvas');
@@ -199,7 +201,6 @@ function randomizeModal() {
   document.getElementById('f-pri').value = Math.floor(Math.random() * 1000 + 500);
   document.getElementById('f-prf').value = Math.floor(1000000 / parseInt(document.getElementById('f-pri').value));
   document.getElementById('f-pw').value = (Math.random() * 8 + 2).toFixed(1);
-  document.getElementById('f-scan').value = Math.floor(Math.random() * 15 + 5);
   document.getElementById('f-range').value = Math.floor(Math.random() * 200 + 50);
 
   const bands = ["L-Band (1–2 GHz)", "S-Band (2–4 GHz)", "C-Band (4–8 GHz)", "X-Band (8–12 GHz)"];
@@ -215,9 +216,7 @@ function confirmAddRadar() {
     pri: parseFloat(document.getElementById('f-pri').value) || 1000,
     prf: parseFloat(document.getElementById('f-prf').value) || 1000,
     pw: parseFloat(document.getElementById('f-pw').value) || 5,
-    scanRate: parseFloat(document.getElementById('f-scan').value) || 12,
     rangeKm: parseFloat(document.getElementById('f-range').value) || 400,
-    pattern: document.getElementById('f-pattern').value,
     cat: document.getElementById('f-cat').value,
     bearing: Math.random() * Math.PI * 2
   };
@@ -227,7 +226,7 @@ function confirmAddRadar() {
     radar.latlng = radars[editingRadarIdx].latlng;
     if (radars[editingRadarIdx].bearing !== undefined) radar.bearing = radars[editingRadarIdx].bearing;
     radars[editingRadarIdx] = radar;
-    addLog(`RADAR SIGNATURE UPDATED: ${name}`, 'match');
+    addLog(`THREAT EMITTER UPDATED: ${name}`, 'match');
     editingRadarIdx = null;
   } else if (editingEmitterIdx !== null) {
     // Upgrading an Unknown Emitter to a fully characterized Radar Threat
@@ -245,7 +244,7 @@ function confirmAddRadar() {
     radar.latlng = pendingLatLng;
     radars.push(radar);
     radarAngles[radars.length - 1] = 0;
-    addLog(`RADAR ADDED: ${name} ALIGNED TO DB`, 'match');
+    addLog(`THREAT EMITTER ADDED: ${name} ALIGNED TO DB`, 'match');
   }
 
   document.getElementById('radar-count').textContent = radars.length;
@@ -300,7 +299,7 @@ function clearLogs() {
 
 function updateThreatLibraryUI() {
   const cntSpan = document.getElementById('lib-count');
-  if (cntSpan) cntSpan.textContent = `[${radars.length + emitters.length}]`;
+  if (cntSpan) cntSpan.textContent = `[${radars.length}]`;
 }
 
 function openLibrary() {
@@ -308,7 +307,7 @@ function openLibrary() {
   overlay.style.display = 'flex';
   const tbody = document.getElementById('library-table-body');
 
-  if (radars.length === 0 && emitters.length === 0) {
+  if (radars.length === 0) {
     tbody.innerHTML = '<tr><td colspan="9" style="padding:24px; text-align:center; color:var(--green-dim); font-style:italic;">— NO THREATS REGISTERED IN DATABASE —</td></tr>';
     return;
   }
@@ -334,25 +333,6 @@ function openLibrary() {
     `).join('');
   }
 
-  if (emitters.length > 0) {
-    htmlRows += emitters.map((e, i) => `
-      <tr style="border-bottom:1px solid rgba(255,170,0,0.2); background:rgba(255,170,0,0.05);">
-        <td style="padding:12px; color:var(--amber); font-weight:bold;">UNKN-${e.id.toString().padStart(2, '0')}</td>
-        <td style="padding:12px; color:var(--amber);">UNCHARACTERIZED</td>
-        <td style="padding:12px; color:var(--amber); opacity:0.6;">*VARIES*</td>
-        <td style="padding:12px; color:var(--amber); opacity:0.6;">*UNKNOWN*</td>
-        <td style="padding:12px; color:var(--amber); opacity:0.6;">*VARIES*</td>
-        <td style="padding:12px; color:var(--amber); opacity:0.6;">*VARIES*</td>
-        <td style="padding:12px; color:var(--amber); opacity:0.6;">*VARIES*</td>
-        <td style="padding:12px; color:var(--amber); opacity:0.6;">*ESTIMATED*</td>
-        <td style="padding:12px; text-align:center; min-width:80px;">
-          <button class="tool-btn" style="padding:4px 10px; font-size:9px;" onclick="editEmitter(${i})">✎ EDIT</button>
-          <button class="tool-btn red" style="padding:4px 8px; font-size:9px;" onclick="deleteEmitter(${i})">✕</button>
-        </td>
-      </tr>
-    `).join('');
-  }
-
   tbody.innerHTML = htmlRows;
 }
 
@@ -369,9 +349,7 @@ function editRadar(idx) {
   document.getElementById('f-pri').value = r.pri;
   document.getElementById('f-prf').value = r.prf;
   document.getElementById('f-pw').value = r.pw;
-  document.getElementById('f-scan').value = r.scanRate;
   document.getElementById('f-range').value = r.rangeKm;
-  document.getElementById('f-pattern').value = r.pattern;
   document.getElementById('f-cat').value = r.cat;
 }
 
@@ -463,7 +441,7 @@ function drawCanvas() {
     });
   }
 
-  // 2. Draw Known Radars
+  // 2. Draw Known Emitters
   radars.forEach((r, i) => drawRadar(r, i));
 
   // 3. Draw Unknown Emitters
@@ -500,49 +478,42 @@ function drawRadar(r, idx) {
 
   const radiusPx = getRadiusPx(r.rangeKm, r.latlng);
 
-  // Range Ring / Sector Slice
+  // Range Ring
   ctx.beginPath();
-  if (r.pattern === 'Sector') {
-    // Draw a pie slice roughly representing the 180 deg frontal sector
-    const b = r.bearing || 0;
-    ctx.moveTo(pt.x, pt.y);
-    ctx.arc(pt.x, pt.y, radiusPx, b - 1.6, b + 1.6);
-    ctx.lineTo(pt.x, pt.y);
-
-    // Slight fill to show the locked sector zone
-    ctx.fillStyle = 'rgba(0, 255, 65, 0.03)';
-    ctx.fill();
-  } else {
-    // Standard full circle
-    ctx.arc(pt.x, pt.y, radiusPx, 0, Math.PI * 2);
-  }
-
+  ctx.arc(pt.x, pt.y, radiusPx, 0, Math.PI * 2);
   ctx.strokeStyle = DIM_GREEN;
   ctx.lineWidth = 1.5;
   ctx.stroke();
 
-  // Sweep Cone
-  const angle = radarAngles[idx] || 0;
+  // Emitter Pulse Waves
+  const t = Date.now() / 1000;
+  // Use PRF to scale the visual ripple speed (e.g. 1000 Hz => 1 speed)
+  const pulseSpeed = r.prf ? r.prf / 1000 : 1;
+  const numRings = 3;
   ctx.save();
-  ctx.beginPath();
-  ctx.moveTo(pt.x, pt.y);
-  ctx.arc(pt.x, pt.y, radiusPx, angle, angle + 0.3); // Beam width
-  ctx.closePath();
-  ctx.fillStyle = 'rgba(0, 255, 65, 0.08)';
-  ctx.fill();
+  for (let step = 0; step < numRings; step++) {
+    const phase = (t * pulseSpeed + step / numRings) % 1;
+    const currentRadius = radiusPx * phase;
+    const alpha = (1 - phase) * 0.6; // Fade out as it expands
 
-  // Sweep Line
-  ctx.beginPath();
-  ctx.moveTo(pt.x, pt.y);
-  ctx.lineTo(pt.x + Math.cos(angle) * radiusPx, pt.y + Math.sin(angle) * radiusPx);
-  ctx.strokeStyle = GLOW_GREEN;
-  ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(pt.x, pt.y, currentRadius, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(0, 255, 65, ${alpha})`;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
 
-  // Icon
-  ctx.fillStyle = '#00ff41';
-  ctx.shadowBlur = 10;
+  // Icon (Diamond instead of Square)
+  ctx.shadowBlur = 15;
   ctx.shadowColor = '#00ff41';
-  ctx.fillRect(pt.x - 3, pt.y - 3, 6, 6);
+  ctx.fillStyle = '#00ff41';
+  ctx.beginPath();
+  ctx.moveTo(pt.x, pt.y - 6);
+  ctx.lineTo(pt.x + 6, pt.y);
+  ctx.lineTo(pt.x, pt.y + 6);
+  ctx.lineTo(pt.x - 6, pt.y);
+  ctx.closePath();
+  ctx.fill();
   ctx.restore();
 
   // Label
@@ -621,36 +592,8 @@ function drawJet() {
 }
 
 function animLoop() {
-  const t = Date.now() / 1000; // Shared timestamp in seconds
-
-  // Update Sweep angles
-  radars.forEach((r, i) => {
-    const rpmRadSec = (r.scanRate * Math.PI * 2) / 60;
-
-    if (r.pattern === 'Sector') {
-      // Sweeps back and forth through a 120-degree wedge (e.g. fire control tracking)
-      const b = r.bearing || 0;
-      const sweepSpeed = rpmRadSec;
-      // Swing +/- 1.5 rad around the assigned bearing
-      radarAngles[i] = b + Math.sin(t * sweepSpeed) * 1.5;
-    }
-    else if (r.pattern === 'Phased Array (AESA)') {
-      // Does not use a rotating physical dish. It electronically jumps the beam instantly.
-      // E.g. Patriots and S-400s stare at a sector and rapid-pulse sectors.
-      // We will make it randomly jump to a new 0-2PI quadrant every few frames based on scan Rate
-      const jumpInterval = Math.max(0.1, 10 / r.scanRate);
-      // Seed random based on timestamp floored to interval
-      const seed = Math.floor(t / jumpInterval) + i;
-      // Simple pseudo random hash
-      const randomRad = ((seed * 9301 + 49297) % 233280) / 233280;
-      radarAngles[i] = randomRad * Math.PI * 2;
-    }
-    else {
-      // Default / Circular: Smooth 360 spin
-      radarAngles[i] = ((radarAngles[i] || 0) + rpmRadSec * 0.016) % (Math.PI * 2);
-    }
-  });
-
+  // Update animations (e.g. pulse waves) via constant re-render
+  // Emitter targets use continuous circular emission without specific directional sweep updates
   drawCanvas();
   requestAnimationFrame(animLoop);
 }
@@ -742,32 +685,16 @@ function launchSortie() {
 
       // 1. MUST overlap on canvas
       if (distPx <= rRadiusPx + cPx) {
-        let isInsideRadarCoverage = true;
+        // Since emission is strictly 'Circular', check if the emitter is inside the Jet's forward detection cone
+        const angleToTarget = Math.atan2(rPt.y - jPt.y, rPt.x - jPt.x);
 
-        // 2. If it's a SECTOR radar, Jet MUST overlap the pie-slice wedge
-        if (r.pattern === 'Sector') {
-          const angleJetFromRadar = Math.atan2(jPt.y - rPt.y, jPt.x - rPt.x);
-          const b = r.bearing || 0;
-          let rDiff = angleJetFromRadar - b;
-          while (rDiff > Math.PI) rDiff -= Math.PI * 2;
-          while (rDiff < -Math.PI) rDiff += Math.PI * 2;
-          if (Math.abs(rDiff) > 1.6) {
-            isInsideRadarCoverage = false;
-          }
-        }
+        let diff = angleToTarget - jetAngle;
+        while (diff > Math.PI) diff -= Math.PI * 2;
+        while (diff < -Math.PI) diff += Math.PI * 2;
 
-        if (isInsideRadarCoverage) {
-          // 3. Radar MUST be inside the Jet's forward detection cone
-          const angleToTarget = Math.atan2(rPt.y - jPt.y, rPt.x - jPt.x);
-
-          let diff = angleToTarget - jetAngle;
-          while (diff > Math.PI) diff -= Math.PI * 2;
-          while (diff < -Math.PI) diff += Math.PI * 2;
-
-          if (Math.abs(diff) <= 0.6) {
-            detectedRadars.add(i);
-            interceptRadar(r);
-          }
+        if (Math.abs(diff) <= 0.6) {
+          detectedRadars.add(i);
+          interceptRadar(r);
         }
       }
     });

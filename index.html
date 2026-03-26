@@ -34,7 +34,7 @@
   <div id="toolbar">
     <button class="tool-btn active" id="btn-pan" onclick="setMode('pan')">⊕ COMAND PAN</button>
     <div class="sep"></div>
-    <button class="tool-btn" id="btn-radar" onclick="setMode('radar')">📡 ADD THREAT RADAR</button>
+    <button class="tool-btn" id="btn-radar" onclick="setMode('radar')">📡 ADD THREAT EMITTER</button>
     <button class="tool-btn amber" id="btn-emitter" onclick="setMode('emitter')">⚡ MARK UNKNOWN EMITTER</button>
     <div class="sep"></div>
     <button class="tool-btn" id="btn-library" onclick="openLibrary()">🗃️ THREAT LIBRARY <span id="lib-count"
@@ -90,7 +90,7 @@
   <!-- STATUS BAR (BOTTOM) -->
   <footer id="status-bar">
     <span>SYSTEM MODE: <strong id="mode-display" class="mode-text">PAN</strong></span>
-    <span>RADAR DATA DB: <strong id="radar-count">0</strong></span>
+    <span>KNOWN EMITTERS DB: <strong id="radar-count">0</strong></span>
     <span>UNKNOWN CONTACTS: <strong id="emitter-count">0</strong></span>
     <span>FLIGHT WAYPOINTS: <strong id="waypoint-count">0</strong></span>
     <span>SIGNALS CAPTURED: <strong id="collected-count">0</strong></span>
@@ -102,7 +102,7 @@
   <!-- ROUTE HINT -->
   <div id="route-hint">FLIGHT PLANNING ACTIVE: CLICK TO ADD WAYPOINTS — RIGHT-CLICK OR ESC TO FINISH</div>
 
-  <!-- MODAL FOR ADDING RADAR -->
+  <!-- MODAL FOR ADDING THREAT EMITTER -->
   <div id="modal-overlay">
     <div id="modal">
       <div class="modal-header">
@@ -145,28 +145,17 @@
             <input type="number" id="f-pw" placeholder="5" />
           </div>
           <div class="form-row">
-            <label>SCAN RATE (rpm)</label>
-            <input type="number" id="f-scan" placeholder="12" />
-          </div>
-          <div class="form-row">
-            <label>DETECTION RANGE (km)</label>
+            <label>TRANSMISSION RANGE (km)</label>
             <input type="number" id="f-range" placeholder="400" />
           </div>
-          <div class="form-row">
-            <label>SCAN PATTERN</label>
-            <select id="f-pattern">
-              <option>Circular</option>
-              <option>Sector</option>
-              <option selected>Phased Array (AESA)</option>
-            </select>
-          </div>
         </div>
+
         <div class="form-row">
           <label>THREAT CATEGORY</label>
           <select id="f-cat">
             <option>SAM (Surface-to-Air Missile)</option>
-            <option>EWR (Early Warning Radar)</option>
-            <option>FCR (Fire Control Radar)</option>
+            <option>EWS (Early Warning System)</option>
+            <option>FCS (Fire Control System)</option>
             <option>GCI (Ground Control Intercept)</option>
             <option>AEW (Airborne Early Warning)</option>
             <option>NAVAL</option>
