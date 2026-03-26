@@ -27,6 +27,16 @@
       <div class="title">ELINT SORTIE SIMULATOR</div>
     </div>
     <div class="status">CLASSIFICATION: TOP SECRET // SIGINT // NOFORN</div>
+    <div style="display:flex;align-items:center;gap:15px; margin-right:20px; margin-left:auto;">
+      <div style="display:flex;align-items:center;gap:6px;">
+        <label style="color:var(--cyan);font-size:10px;">JET COLOR</label>
+        <input type="color" id="jet-color" value="#00d4ff" title="Jet Color" style="height:24px;width:30px;border:none;background:transparent;cursor:pointer;">
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;">
+        <label style="color:var(--cyan);font-size:10px;">MACH</label>
+        <input type="range" id="jet-speed" min="1" max="100" value="10" title="Jet Speed" style="width:70px;cursor:pointer;">
+      </div>
+    </div>
     <div id="clock">00:00:00Z</div>
   </header>
 

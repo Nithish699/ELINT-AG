@@ -562,8 +562,12 @@ function drawJet() {
   ctx.translate(pt.x, pt.y);
   ctx.rotate(jetAngle); // Use simple screen angle (radians)
 
+  // Dynamic scaling based on zoom
+  const zoomScale = Math.max(0.5, Math.pow(1.5, map.getZoom() - 5));
+  ctx.scale(zoomScale, zoomScale);
+
   // Sensor Collection Cone (spread facing forward)
-  const conePx = 50; // Scaled down for a more realistic medium size
+  const conePx = 50; 
   ctx.beginPath();
   ctx.moveTo(0, 0);
   ctx.arc(0, 0, conePx, -0.6, 0.6);
@@ -571,16 +575,43 @@ function drawJet() {
   ctx.fillStyle = 'rgba(0, 212, 255, 0.08)';
   ctx.fill();
   ctx.strokeStyle = 'rgba(0, 212, 255, 0.4)';
-  ctx.lineWidth = 1;
+  ctx.lineWidth = 1 / zoomScale; // Keep stroke width constant
   ctx.stroke();
 
-  // Jet Body
-  ctx.shadowBlur = 10; ctx.shadowColor = CYAN; ctx.fillStyle = CYAN;
+  // Jet Body Vector Path
+  const jetColor = document.getElementById('jet-color') ? document.getElementById('jet-color').value : CYAN;
+  ctx.shadowBlur = 10; ctx.shadowColor = jetColor; ctx.fillStyle = jetColor;
   ctx.beginPath();
-  ctx.moveTo(6, 0);
-  ctx.lineTo(-5, -4);
-  ctx.lineTo(-3, 0);
-  ctx.lineTo(-5, 4);
+  ctx.moveTo(12, 0); 
+  ctx.lineTo(6, 3);
+  ctx.lineTo(2, 3); 
+  ctx.lineTo(-4, 12); 
+  ctx.lineTo(-7, 12); 
+  ctx.lineTo(-3, 3);
+  ctx.lineTo(-9, 2); 
+  ctx.lineTo(-12, 6); 
+  ctx.lineTo(-14, 6); 
+  ctx.lineTo(-12, 0); 
+  ctx.lineTo(-14, -6);
+  ctx.lineTo(-12, -6);
+  ctx.lineTo(-9, -2);
+  ctx.lineTo(-3, -3);
+  ctx.lineTo(-7, -12);
+  ctx.lineTo(-4, -12);
+  ctx.lineTo(2, -3);
+  ctx.lineTo(6, -3);
+  ctx.closePath();
+  ctx.fill();
+
+  // Draw some simple glass for the cockpit
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+  ctx.beginPath();
+  ctx.moveTo(8, 0);
+  ctx.lineTo(5, 2);
+  ctx.lineTo(2, 1);
+  ctx.lineTo(2, -1);
+  ctx.lineTo(5, -2);
   ctx.closePath();
   ctx.fill();
 
@@ -629,8 +660,8 @@ function launchSortie() {
     totalKm += d;
   }
 
-  const durationMs = 25000; // 25s flight
-  let startTime = null;
+  let lastTime = null;
+  let targetKm = 0;
 
   const detectedRadars = new Set();
   const detectedEmitters = new Set();
@@ -638,14 +669,19 @@ function launchSortie() {
 
   function step(ts) {
     if (!missionRunning) return; // Aborted
-    if (!startTime) startTime = ts;
+    if (!lastTime) lastTime = ts;
+    const dtSeconds = (ts - lastTime) / 1000.0;
+    lastTime = ts;
 
-    const elapsed = ts - startTime;
-    missionProgress = Math.min(elapsed / durationMs, 1);
+    const speedVal = document.getElementById('jet-speed') ? parseInt(document.getElementById('jet-speed').value) : 5;
+    
+    const kmPerSecond = speedVal * 25; // 1 -> 25km/s, 10 -> 250km/s
+    targetKm += kmPerSecond * dtSeconds;
+    targetKm = Math.min(targetKm, totalKm);
+
+    missionProgress = Math.min(targetKm / totalKm, 1);
 
     document.getElementById('sortie-progress-fill').style.width = `${missionProgress * 100}%`;
-
-    const targetKm = missionProgress * totalKm;
     let currSeg = segments[segments.length - 1];
 
     for (let i = 0; i < segments.length; i++) {
