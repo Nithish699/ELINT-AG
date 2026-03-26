@@ -34,10 +34,10 @@
   <div id="toolbar">
     <button class="tool-btn active" id="btn-pan" onclick="setMode('pan')">⊕ COMAND PAN</button>
     <div class="sep"></div>
-    <button class="tool-btn" id="btn-radar" onclick="setMode('radar')">📡 ADD THREAT EMITTER</button>
+    <button class="tool-btn" id="btn-radar" onclick="setMode('radar')">📡 ADD EMITTER</button>
     <button class="tool-btn amber" id="btn-emitter" onclick="setMode('emitter')">⚡ MARK UNKNOWN EMITTER</button>
     <div class="sep"></div>
-    <button class="tool-btn" id="btn-library" onclick="openLibrary()">🗃️ THREAT LIBRARY <span id="lib-count"
+    <button class="tool-btn" id="btn-library" onclick="openLibrary()">🗃️ EMITTER LIBRARY <span id="lib-count"
         style="color:var(--cyan)">[0]</span></button>
     <div class="sep"></div>
     <button class="tool-btn cyan" id="btn-route" onclick="setMode('route')">✈ DRAW FLIGHT ROUTE</button>
@@ -102,11 +102,11 @@
   <!-- ROUTE HINT -->
   <div id="route-hint">FLIGHT PLANNING ACTIVE: CLICK TO ADD WAYPOINTS — RIGHT-CLICK OR ESC TO FINISH</div>
 
-  <!-- MODAL FOR ADDING THREAT EMITTER -->
+  <!-- MODAL FOR ADDING EMITTER -->
   <div id="modal-overlay">
     <div id="modal">
       <div class="modal-header">
-        <h3>◈ CATALOG NEW EMITTER THREAT</h3>
+        <h3>◈ CATALOG NEW EMITTER</h3>
         <button class="close-btn" onclick="closeModal()">✕</button>
       </div>
       <div class="modal-body">
@@ -149,18 +149,6 @@
             <input type="number" id="f-range" placeholder="400" />
           </div>
         </div>
-
-        <div class="form-row">
-          <label>THREAT CATEGORY</label>
-          <select id="f-cat">
-            <option>SAM (Surface-to-Air Missile)</option>
-            <option>EWS (Early Warning System)</option>
-            <option>FCS (Fire Control System)</option>
-            <option>GCI (Ground Control Intercept)</option>
-            <option>AEW (Airborne Early Warning)</option>
-            <option>NAVAL</option>
-          </select>
-        </div>
         <div class="modal-btns">
           <button class="tool-btn block-btn" onclick="confirmAddRadar()">✓ COMMIT & DEPLOY</button>
         </div>
@@ -168,13 +156,13 @@
     </div>
   </div>
 
-  <!-- MODAL FOR EXTENDED THREAT LIBRARY -->
+  <!-- MODAL FOR EXTENDED EMITTER LIBRARY -->
   <div id="library-overlay"
     style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.9); z-index:9999; align-items:center; justify-content:center;">
     <div id="library-modal"
       style="background:var(--bg-deep); border:1px solid var(--green); width:800px; max-width:95vw; height:80vh; max-height:600px; display:flex; flex-direction:column; border-top:3px solid var(--green); box-shadow:0 0 30px rgba(0,255,65,0.15);">
       <div class="modal-header">
-        <h3>◈ COMPLETE THREAT LIBRARY SYSTEM</h3>
+        <h3>◈ COMPLETE EMITTER LIBRARY SYSTEM</h3>
         <button class="close-btn" onclick="closeLibrary()">✕</button>
       </div>
       <div class="modal-body" style="overflow-y:auto; flex:1; padding:0;">
@@ -184,7 +172,6 @@
             style="background:rgba(0,255,65,0.05); border-bottom:1px solid var(--border); color:var(--green-dim); font-size:10px; letter-spacing:1px;">
             <tr>
               <th style="padding:12px;">DESIGNATION</th>
-              <th style="padding:12px;">CAT</th>
               <th style="padding:12px;">FREQ (MHz)</th>
               <th style="padding:12px;">BAND</th>
               <th style="padding:12px;">PRI (μs)</th>

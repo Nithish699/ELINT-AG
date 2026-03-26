@@ -295,25 +295,27 @@ html, body {
 .log-entry.unknown { color: var(--amber); text-shadow: 0 0 4px var(--amber); }
 .log-entry.alert { color: var(--red); text-shadow: 0 0 4px var(--red); font-weight: bold; }
 
-/* THREAT ITEMS */
-.threat-card {
-  background: rgba(0, 255, 65, 0.04);
+/* EMITTER ITEMS */
+.emitter-card {
+  padding: 12px;
+  background: rgba(0, 255, 65, 0.03);
   border: 1px solid rgba(0, 255, 65, 0.2);
-  padding: 8px 10px;
-  margin-bottom: 6px;
-  font-size: 11px;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  transition: all 0.2s;
+  cursor: pointer;
   position: relative;
   overflow: hidden;
-  transition: all 0.2s ease;
 }
-.threat-card:hover { border-color: var(--green); background: rgba(0, 255, 65, 0.08); }
-.threat-card::before {
-  content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--green);
+.emitter-card:hover { border-color: var(--green); background: rgba(0, 255, 65, 0.08); }
+.emitter-card::before {
+  content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--green);
 }
 
-.threat-card.card-unknown { background: rgba(255, 170, 0, 0.04); border-color: rgba(255, 170, 0, 0.3); }
-.threat-card.card-unknown:hover { border-color: var(--amber); }
-.threat-card.card-unknown::before { background: var(--amber); }
+.emitter-card.card-unknown { background: rgba(255, 170, 0, 0.04); border-color: rgba(255, 170, 0, 0.3); }
+.emitter-card.card-unknown:hover { border-color: var(--amber); }
+.emitter-card.card-unknown::before { background: var(--amber); }
 
 .t-title { font-weight: bold; font-size: 12px; margin-bottom: 4px; display: flex; align-items: center; gap: 6px; }
 .card-known .t-title { color: var(--green); }

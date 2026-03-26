@@ -5,7 +5,7 @@ let map;
 let canvas, ctx;
 let mode = 'pan'; // pan, radar, emitter, route
 
-let radars = [];       // Known Threat Library
+let radars = [];       // Known Emitter Library
 let emitters = [];     // Unknown Entities
 let routeLatLngs = []; // Jet Route Waypoints [L.LatLng]
 let pendingLatLng = null; // Stored when modal opens
@@ -216,7 +216,6 @@ function confirmAddRadar() {
     prf: parseFloat(document.getElementById('f-prf').value) || 1000,
     pw: parseFloat(document.getElementById('f-pw').value) || 5,
     rangeKm: parseFloat(document.getElementById('f-range').value) || 400,
-    cat: document.getElementById('f-cat').value,
     bearing: Math.random() * Math.PI * 2
   };
 
@@ -225,10 +224,10 @@ function confirmAddRadar() {
     radar.latlng = radars[editingRadarIdx].latlng;
     if (radars[editingRadarIdx].bearing !== undefined) radar.bearing = radars[editingRadarIdx].bearing;
     radars[editingRadarIdx] = radar;
-    addLog(`THREAT EMITTER UPDATED: ${name}`, 'match');
+    addLog(`EMITTER UPDATED: ${name}`, 'match');
     editingRadarIdx = null;
   } else if (editingEmitterIdx !== null) {
-    // Upgrading an Unknown Emitter to a fully characterized Radar Threat
+    // Upgrading an Unknown Emitter to a fully characterized Emitter
     radar.latlng = emitters[editingEmitterIdx].latlng;
     radars.push(radar);
     radarAngles[radars.length - 1] = 0;
@@ -243,12 +242,12 @@ function confirmAddRadar() {
     radar.latlng = pendingLatLng;
     radars.push(radar);
     radarAngles[radars.length - 1] = 0;
-    addLog(`THREAT EMITTER ADDED: ${name} ALIGNED TO DB`, 'match');
+    addLog(`EMITTER ADDED: ${name} ALIGNED TO DB`, 'match');
   }
 
   document.getElementById('radar-count').textContent = radars.length;
   document.getElementById('emitter-count').textContent = emitters.length; // Ensure this syncs during upgrades
-  updateThreatLibraryUI();
+  updateEmitterLibraryUI();
 
   closeModal();
   drawCanvas();
@@ -258,7 +257,7 @@ function addEmitter(latlng) {
   const e = { latlng, id: emitterCounter++ };
   emitters.push(e);
   document.getElementById('emitter-count').textContent = emitters.length;
-  updateThreatLibraryUI(); // Ensure Threat Library button counter updates
+  updateEmitterLibraryUI(); // Ensure Emitter Library button counter updates
 
   const formattedCoord = `${Math.abs(latlng.lat).toFixed(2)}°${latlng.lat > 0 ? 'N' : 'S'}, ${Math.abs(latlng.lng).toFixed(2)}°${latlng.lng > 0 ? 'E' : 'W'}`;
   addLog(`UNKNOWN EMITTER DETECTED AT ${formattedCoord}`, 'unknown');
@@ -296,7 +295,7 @@ function clearLogs() {
   logDiv.innerHTML = '<div class="log-entry system">— LOGS CLEARED —</div>';
 }
 
-function updateThreatLibraryUI() {
+function updateEmitterLibraryUI() {
   const cntSpan = document.getElementById('lib-count');
   if (cntSpan) cntSpan.textContent = `[${radars.length}]`;
 }
@@ -307,7 +306,7 @@ function openLibrary() {
   const tbody = document.getElementById('library-table-body');
 
   if (radars.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="9" style="padding:24px; text-align:center; color:var(--green-dim); font-style:italic;">— NO THREATS REGISTERED IN DATABASE —</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" style="padding:24px; text-align:center; color:var(--green-dim); font-style:italic;">— NO EMITTERS REGISTERED IN DATABASE —</td></tr>';
     return;
   }
 
@@ -317,7 +316,6 @@ function openLibrary() {
     htmlRows += radars.map((r, i) => `
       <tr style="border-bottom:1px solid rgba(0,255,65,0.1); background:rgba(0,255,65,0.02); transition:all 0.2s;">
         <td style="padding:12px; color:var(--green); font-weight:bold;">${r.name}</td>
-        <td style="padding:12px; color:var(--green-dim);">${r.cat}</td>
         <td style="padding:12px;">${r.freq}</td>
         <td style="padding:12px; color:var(--green-dim);">${r.band.split(' ')[0]}</td>
         <td style="padding:12px;">${r.pri}</td>
@@ -349,7 +347,6 @@ function editRadar(idx) {
   document.getElementById('f-prf').value = r.prf;
   document.getElementById('f-pw').value = r.pw;
   document.getElementById('f-range').value = r.rangeKm;
-  document.getElementById('f-cat').value = r.cat;
 }
 
 function editEmitter(idx) {
@@ -363,9 +360,9 @@ function editEmitter(idx) {
 }
 
 function deleteRadar(idx) {
-  if (confirm(`Purge Threat Signature: ${radars[idx].name}?`)) {
+  if (confirm(`Purge Emitter Signature: ${radars[idx].name}?`)) {
     radars.splice(idx, 1);
-    updateThreatLibraryUI();
+    updateEmitterLibraryUI();
     openLibrary();
     drawCanvas();
   }
@@ -374,7 +371,7 @@ function deleteRadar(idx) {
 function deleteEmitter(idx) {
   if (confirm(`Purge Unknown Emitter UNKN-${emitters[idx].id.toString().padStart(2, '0')}?`)) {
     emitters.splice(idx, 1);
-    updateThreatLibraryUI();
+    updateEmitterLibraryUI();
     openLibrary();
     drawCanvas();
   }
@@ -762,7 +759,7 @@ function interceptEmitter(e) {
 
   addLog(`⚡ ANOMALOUS SIGNAL [UNKN-${e.id}]`, 'unknown');
   setTimeout(() => {
-    addLog(`✕ NO DB MATCH. FLAGGED AS NEW THREAT.`, 'alert');
+    addLog(`✕ NO DB MATCH. FLAGGED AS UNKNOWN EMITTER.`, 'alert');
   }, 400);
 
   appendCollectedUI(`UNKN-${e.id}`, 'UNKNOWN', freq, pri);
@@ -777,7 +774,7 @@ function appendCollectedUI(title, status, freq, pri) {
   const cls = isK ? 'card-known' : 'card-unknown';
 
   const div = document.createElement('div');
-  div.className = `threat-card ${cls}`;
+  div.className = `emitter-card ${cls}`;
   div.innerHTML = `
     <div class="t-title">${isK ? '✓' : '✕'} ${title} <span class="t-badge">${status}</span></div>
     <div class="t-details">FREQ: ${freq}MHz | PRI: ${pri}μs</div>
@@ -822,7 +819,7 @@ function clearAll() {
   document.getElementById('sortie-progress-fill').style.width = '0%';
   document.getElementById('collected-signals').innerHTML = '<div class="empty-msg">— NO SIGNALS ACQUIRED YET —</div>';
 
-  updateThreatLibraryUI();
+  updateEmitterLibraryUI();
   addLog('SYSTEM PURGED. MAP CLEARED.');
   drawCanvas();
 }
