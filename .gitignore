@@ -1,0 +1,3 @@
+# Ignore downloaded map tiles so they do not bloat the repository
+__pycache__/
+*.pyc
