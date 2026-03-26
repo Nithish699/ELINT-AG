@@ -41,11 +41,10 @@ function init() {
     attributionControl: false
   });
 
-  // Use Local Offline Tiles (CartoDB Dark Matter downloaded)
-  const baseTiles = L.tileLayer('tiles/{z}/{x}/{y}.png', {
-    maxZoom: 10,
-    minZoom: 0,
-    noWrap: true // Optionally keep map from repeating horizontally if required
+  // Initialize map correctly so that Z9 is supported
+  L.tileLayer('tiles/{z}/{x}/{y}.png', {
+      maxZoom: 9, // Development zoom limit
+      attribution: 'Offline Map'
   }).addTo(map);
 
   canvas = document.getElementById('overlay-canvas');

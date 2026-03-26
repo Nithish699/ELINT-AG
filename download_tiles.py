@@ -1,10 +1,16 @@
 import os
+import shutil
 import urllib.request
 import math
 from concurrent.futures import ThreadPoolExecutor
 
-URL_TEMPLATE = "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png"
+# Light theme CartoDB tiles
+URL_TEMPLATE = "https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png"
 OUTPUT_DIR = "tiles"
+
+print("Removing old tiles...")
+if os.path.exists(OUTPUT_DIR):
+    shutil.rmtree(OUTPUT_DIR)
 
 def download_tile(task):
     z, x, y = task
@@ -25,22 +31,34 @@ def download_tile(task):
 
 tasks = []
 
-# Z8: x: 172-201 (30), y: 96-125 (30) -> 900 tiles
-for x in range(172, 202):
-    for y in range(96, 126):
-        tasks.append((8, x, y))
+def get_xyz(lon_deg, lat_deg, zoom):
+    lat_rad = math.radians(lat_deg)
+    n = 2.0 ** zoom
+    xtile = int((lon_deg + 180.0) / 360.0 * n)
+    ytile = int((1.0 - math.asinh(math.tan(lat_rad)) / math.pi) / 2.0 * n)
+    # Ensure tiles don't go out of bounds for the zoom level
+    xtile = max(0, min(xtile, int(n) - 1))
+    ytile = max(0, min(ytile, int(n) - 1))
+    return (xtile, ytile)
 
-# Z9: x: 344-403 (60), y: 192-251 (60) -> 3600 tiles
-for x in range(344, 404):
-    for y in range(192, 252):
-        tasks.append((9, x, y))
+# India / operations approximate bbox
+# Covers ~62E to ~98E and ~6N to ~38N
+MIN_LON = 62.0
+MAX_LON = 98.0
+MIN_LAT = 6.0
+MAX_LAT = 38.0
 
-# Z10: x: 688-807 (120), y: 384-503 (120) -> 14400 tiles
-for x in range(688, 808):
-    for y in range(384, 504):
-        tasks.append((10, x, y))
+# Minimal zoom for development (0 to 9) 
+# Restricting every single zoom level ONLY to the bounding box around India!
+for z in range(0, 10): 
+    min_x, max_y = get_xyz(MIN_LON, MIN_LAT, z)
+    max_x, min_y = get_xyz(MAX_LON, MAX_LAT, z)
+    
+    for x in range(min_x, max_x + 1):
+        for y in range(min_y, max_y + 1):
+            tasks.append((z, x, y))
 
-print(f"Downloading {len(tasks)} additional tiles to '{OUTPUT_DIR}'...")
+print(f"Downloading {len(tasks)} light map tiles to '{OUTPUT_DIR}' (India specific)...")
 
 with ThreadPoolExecutor(max_workers=50) as executor:
     list(executor.map(download_tile, tasks))
