@@ -17,6 +17,7 @@ let missionFrame = null;
 let missionProgress = 0;
 let jetPosLatLng = null;
 let jetAngle = 0;
+let jetMarker = null;
 
 let collectedSignals = [];
 let radarAngles = {}; // Current sweep angle per radar index
@@ -33,34 +34,48 @@ const CYAN = '#00d4ff';
 // INIT LAYER
 // ═══════════════════════════════════════════
 function init() {
-  // Initialize Leaflet Map focused on India
-  map = L.map('leaflet-map', {
-    center: [20.5937, 78.9629],
-    zoom: 5,
-    zoomControl: false,
+  // Initialize Maplibre GL JS Map focused on India with 3D Terrain
+  map = new maplibregl.Map({
+    container: 'leaflet-map',
+    style: {
+      version: 8,
+      sources: {
+        'satellite': {
+          'type': 'raster',
+          'tiles': ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
+          'tileSize': 256
+        },
+        'terrain-source': {
+          'type': 'raster-dem',
+          'tiles': ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
+          'encoding': 'terrarium',
+          'tileSize': 256
+        }
+      },
+      layers: [{
+        'id': 'satellite-layer',
+        'type': 'raster',
+        'source': 'satellite',
+        'minzoom': 0,
+        'maxzoom': 22
+      }],
+      terrain: { 'source': 'terrain-source', 'exaggeration': 1.5 }
+    },
+    pitch: 75,
+    maxPitch: 85,
+    bearing: -20,
+    center: [78.9629, 20.5937],
+    zoom: 6,
     attributionControl: false
   });
 
-  // Initialize map correctly so that Z9 is supported
-  L.tileLayer('tiles/{z}/{x}/{y}.png', {
-      maxZoom: 9, // Development zoom limit
-      attribution: 'Offline Map'
-  }).addTo(map);
+  map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-left');
 
-  canvas = document.getElementById('overlay-canvas');
-  ctx = canvas.getContext('2d');
-
-  // Resize handling
-  window.addEventListener('resize', resizeCanvas);
-  resizeCanvas();
-
-  // Redraw canvas explicitly when map moves or zooms
-  map.on('move', drawCanvas);
-  map.on('zoom', drawCanvas);
+  map.on('load', setupMapLayers);
 
   // Map Click Handling
   map.on('click', onMapClick);
-  // Prevent leaflet context menu
+  // Prevent canvas context menu
   map.getContainer().addEventListener('contextmenu', e => {
     e.preventDefault();
     if (mode === 'route') {
@@ -81,9 +96,6 @@ function init() {
 
   // Splitter Setup
   initSplitter();
-
-  // Start Background Animation Loop for Sweeps
-  requestAnimationFrame(animLoop);
 }
 
 function initSplitter() {
@@ -117,10 +129,7 @@ function initSplitter() {
 }
 
 function resizeCanvas() {
-  const container = document.getElementById('view-container');
-  canvas.width = container.clientWidth;
-  canvas.height = container.clientHeight;
-  drawCanvas();
+  // Empty stub for legacy calls
 }
 
 function updateClock() {
@@ -144,18 +153,16 @@ function setMode(newMode) {
   document.getElementById('mode-display').textContent = newMode.toUpperCase();
   document.getElementById('route-hint').style.display = newMode === 'route' ? 'block' : 'none';
 
-  // Toggle map dragging based on mode
+  // Toggle map cursor based on mode
   if (mode === 'pan') {
-    map.dragging.enable();
     map.getContainer().style.cursor = 'grab';
   } else {
-    map.dragging.disable();
     map.getContainer().style.cursor = 'crosshair';
   }
 }
 
 function onMapClick(e) {
-  const latlng = e.latlng;
+  const latlng = e.lngLat;
 
   if (mode === 'radar') {
     pendingLatLng = latlng;
@@ -166,7 +173,7 @@ function onMapClick(e) {
   } else if (mode === 'route') {
     routeLatLngs.push(latlng);
     document.getElementById('waypoint-count').textContent = routeLatLngs.length;
-    drawCanvas();
+    window.needsStaticUpdate = true;
   }
 }
 
@@ -250,7 +257,7 @@ function confirmAddRadar() {
   updateEmitterLibraryUI();
 
   closeModal();
-  drawCanvas();
+  window.needsStaticUpdate = true;
 }
 
 function addEmitter(latlng) {
@@ -261,14 +268,14 @@ function addEmitter(latlng) {
 
   const formattedCoord = `${Math.abs(latlng.lat).toFixed(2)}°${latlng.lat > 0 ? 'N' : 'S'}, ${Math.abs(latlng.lng).toFixed(2)}°${latlng.lng > 0 ? 'E' : 'W'}`;
   addLog(`UNKNOWN EMITTER DETECTED AT ${formattedCoord}`, 'unknown');
-  drawCanvas();
+  window.needsStaticUpdate = true;
 }
 
 function clearRoute() {
   routeLatLngs = [];
   document.getElementById('waypoint-count').textContent = '0';
   addLog('WAYPOINTS CLEARED');
-  drawCanvas();
+  window.needsStaticUpdate = true;
 }
 
 // ═══════════════════════════════════════════
@@ -364,7 +371,7 @@ function deleteRadar(idx) {
     radars.splice(idx, 1);
     updateEmitterLibraryUI();
     openLibrary();
-    drawCanvas();
+    window.needsStaticUpdate = true;
   }
 }
 
@@ -373,7 +380,7 @@ function deleteEmitter(idx) {
     emitters.splice(idx, 1);
     updateEmitterLibraryUI();
     openLibrary();
-    drawCanvas();
+    window.needsStaticUpdate = true;
   }
 }
 
@@ -384,17 +391,22 @@ function closeLibrary() {
 // ═══════════════════════════════════════════
 // ANIMATION & CANVAS RENDER PIPELINE
 // ═══════════════════════════════════════════
-// meters per pixel approx at equator: 40075016 / 256 / 2^zoom * Math.cos(lat)
-// Better: We just use leafet point conversion, and for radius we can convert LatLng to Point at Map center
+// Math approximation for distance natively implementation
+function getDistanceKm(ll1, ll2) {
+  const R = 6371; // Earth Radius in km
+  const dLat = (ll2.lat - ll1.lat) * Math.PI / 180;
+  const dLon = (ll2.lng - ll1.lng) * Math.PI / 180;
+  const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+            Math.cos(ll1.lat * Math.PI / 180) * Math.cos(ll2.lat * Math.PI / 180) *
+            Math.sin(dLon/2) * Math.sin(dLon/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return R * c;
+}
+
 function getRadiusPx(kmRadius, latlng) {
-  const p1 = map.latLngToContainerPoint(latlng);
-
-  // Calculate a point 'radius' km East
-  const dest = L.GeometryUtil ?
-    L.GeometryUtil.destination(latlng, 90, kmRadius * 1000) :
-    destPointRaw(latlng, 90, kmRadius);
-
-  const p2 = map.latLngToContainerPoint(dest);
+  const p1 = map.project(latlng);
+  const dest = destPointRaw(latlng, 90, kmRadius);
+  const p2 = map.project(dest);
   return Math.max(2, Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2)));
 }
 
@@ -410,219 +422,141 @@ function destPointRaw(latlng, brng, d) {
   const lon2 = lon1 + Math.atan2(Math.sin(brngRad) * Math.sin(d / R) * Math.cos(lat1),
     Math.cos(d / R) - Math.sin(lat1) * Math.sin(lat2));
 
-  return L.latLng(lat2 * 180 / Math.PI, lon2 * 180 / Math.PI);
+  return new maplibregl.LngLat(lon2 * 180 / Math.PI, lat2 * 180 / Math.PI);
 }
 
+
+function createGeoJSONCircle(center, radiusKm, points = 32) {
+  const dX = radiusKm / (111.32 * Math.cos(center.lat * Math.PI / 180));
+  const dY = radiusKm / 110.574;
+  const coords = [];
+  for(let i=0; i<points; i++) {
+    const th = (i/points)*Math.PI*2;
+    coords.push([center.lng + dX*Math.cos(th), center.lat + dY*Math.sin(th)]);
+  }
+  coords.push(coords[0]);
+  return { type:'Feature', geometry: { type:'Polygon', coordinates:[coords] } };
+}
+
+function setupMapLayers() {
+  const sources = [
+    { id: 'route-line', type: 'geojson', data: { type: 'FeatureCollection', features: [] } },
+    { id: 'route-points', type: 'geojson', data: { type: 'FeatureCollection', features: [] } },
+    { id: 'radar-rings', type: 'geojson', data: { type: 'FeatureCollection', features: [] } },
+    { id: 'radar-pulse', type: 'geojson', data: { type: 'FeatureCollection', features: [] } },
+    { id: 'emitter-pulse', type: 'geojson', data: { type: 'FeatureCollection', features: [] } },
+    { id: 'active-links', type: 'geojson', data: { type: 'FeatureCollection', features: [] } }
+  ];
+  sources.forEach(s => map.addSource(s.id, { type: s.type, data: s.data }));
+
+  map.addLayer({ id: 'l-route-line', type: 'line', source: 'route-line', paint: { 'line-color': '#00d4ff', 'line-width': 2, 'line-dasharray': [4, 4] } });
+  map.addLayer({ id: 'l-route-points', type: 'circle', source: 'route-points', paint: { 'circle-color': '#00ff41', 'circle-radius': 4 } });
+  map.addLayer({ id: 'l-radar-rings', type: 'fill', source: 'radar-rings', paint: { 'fill-color': 'rgba(0, 255, 65, 0.1)', 'fill-outline-color': 'rgba(0, 255, 65, 0.4)' } });
+  map.addLayer({ id: 'l-radar-pulse', type: 'line', source: 'radar-pulse', paint: { 'line-color': 'rgba(0, 255, 65, 0.6)', 'line-width': 2 } });
+  map.addLayer({ id: 'l-emitter-pulse', type: 'line', source: 'emitter-pulse', paint: { 'line-color': 'rgba(255, 170, 0, 0.6)', 'line-width': 2 } });
+  map.addLayer({ id: 'l-active-links', type: 'line', source: 'active-links', paint: { 'line-color': '#00d4ff', 'line-width': 2, 'line-dasharray': [4,4] } });
+
+  requestAnimationFrame(updateMapData);
+}
+
+window.needsStaticUpdate = true;
+let lastPulseTime = 0;
+
+function setFeatureData(id, data) {
+  const source = map.getSource(id);
+  if (source) source.setData(data);
+}
+
+function updateMapData() {
+  if (!map.isStyleLoaded()) {
+    requestAnimationFrame(updateMapData);
+    return;
+  }
+
+  try {
+    // 1. Static Elements (Only update when array lengths/stats change)
+    if (window.needsStaticUpdate) {
+      window.needsStaticUpdate = false;
+
+      // Routes
+      if (routeLatLngs.length > 0) {
+        const coords = routeLatLngs.map(ll => [ll.lng, ll.lat]);
+        if (coords.length > 1) {
+          setFeatureData('route-line', { type: 'Feature', geometry: { type: 'LineString', coordinates: coords } });
+        } else {
+          setFeatureData('route-line', { type: 'FeatureCollection', features: [] });
+        }
+        setFeatureData('route-points', { type: 'FeatureCollection', features: coords.map(c => ({ type: 'Feature', geometry: { type: 'Point', coordinates: c } })) });
+      } else {
+        setFeatureData('route-line', { type: 'FeatureCollection', features: [] });
+        setFeatureData('route-points', { type: 'FeatureCollection', features: [] });
+      }
+
+      // Radar Static Rings
+      const radarRings = radars.map(r => createGeoJSONCircle(r.latlng, r.rangeKm, 24));
+      setFeatureData('radar-rings', { type: 'FeatureCollection', features: radarRings });
+    }
+
+    // 2. Throttle Heavy Pulsing Geometries (MapLibre Worker Choke Protection)
+    const now = Date.now();
+    if (now - lastPulseTime > 50) { // ~20 fps throttled updates for heavy rings
+      lastPulseTime = now;
+      const t = now / 1000;
+      
+      const radarPulses = [];
+      radars.forEach(r => {
+        const pulseSpeed = r.prf ? r.prf / 1000 : 1;
+        for (let step = 0; step < 3; step++) {
+          const phase = (t * pulseSpeed + step / 3) % 1;
+          radarPulses.push(createGeoJSONCircle(r.latlng, r.rangeKm * phase, 24));
+        }
+      });
+      setFeatureData('radar-pulse', { type: 'FeatureCollection', features: radarPulses });
+
+      const emitterPulses = emitters.map(e => {
+        const pulseR = (Math.sin(t * 4) + 1) / 2;
+        return createGeoJSONCircle(e.latlng, 150 * (0.2 + pulseR * 0.3), 16); // fewer vertices
+      });
+      setFeatureData('emitter-pulse', { type: 'FeatureCollection', features: emitterPulses });
+    }
+
+    // 3. Ultra-Fast Live Simulation Data (60 FPS Safe)
+    if (jetPosLatLng) {
+      if (!jetMarker) {
+        const el = document.createElement('div');
+        el.innerHTML = `<svg width="40" height="40" viewBox="-20 -20 40 40" style="overflow: visible;">
+          <path d="M 12 0 L 6 3 L 2 3 L -4 12 L -7 12 L -3 3 L -9 2 L -12 6 L -14 6 L -12 0 L -14 -6 L -12 -6 L -9 -2 L -3 -3 L -7 -12 L -4 -12 L 2 -3 L 6 -3 Z" fill="#00d4ff" filter="drop-shadow(0 0 5px #00d4ff)"/>
+          <path d="M 8 0 L 5 2 L 2 1 L 2 -1 L 5 -2 Z" fill="rgba(0,0,0,0.7)"/>
+        </svg>`;
+        el.style.pointerEvents = 'none';
+        jetMarker = new maplibregl.Marker({ element: el, pitchAlignment: 'map', rotationAlignment: 'map' })
+          .setLngLat(jetPosLatLng)
+          .addTo(map);
+      }
+      jetMarker.setLngLat([jetPosLatLng.lng, jetPosLatLng.lat]);
+      jetMarker.setRotation(jetAngle * 180 / Math.PI);
+
+      if (activeDetections.length > 0) {
+        const links = activeDetections.map(tg => ({ 
+          type: 'Feature', geometry: { type: 'LineString', coordinates: [[jetPosLatLng.lng, jetPosLatLng.lat], [tg.lng, tg.lat]] } 
+        }));
+        setFeatureData('active-links', { type: 'FeatureCollection', features: links });
+      } else {
+        setFeatureData('active-links', { type: 'FeatureCollection', features: [] });
+      }
+    } else {
+      if (jetMarker) { jetMarker.remove(); jetMarker = null; }
+      setFeatureData('active-links', { type: 'FeatureCollection', features: [] });
+    }
+  } catch (err) {
+    console.error("Map Data Loop Error:", err);
+  }
+
+  requestAnimationFrame(updateMapData);
+}
 
 function drawCanvas() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-  // 1. Draw Route
-  if (routeLatLngs.length > 0) {
-    ctx.beginPath();
-    const pts = routeLatLngs.map(ll => map.latLngToContainerPoint(ll));
-    ctx.moveTo(pts[0].x, pts[0].y);
-    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
-
-    ctx.strokeStyle = 'rgba(0, 212, 255, 0.4)';
-    ctx.lineWidth = 2;
-    ctx.setLineDash([8, 8]);
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    // Waypoints
-    pts.forEach((pt, i) => {
-      ctx.fillStyle = i === 0 ? '#00ff41' : (i === pts.length - 1 ? '#ff2a2a' : '#00d4ff');
-      ctx.beginPath(); ctx.arc(pt.x, pt.y, 4, 0, Math.PI * 2); ctx.fill();
-    });
-  }
-
-  // 2. Draw Known Emitters
-  radars.forEach((r, i) => drawRadar(r, i));
-
-  // 3. Draw Unknown Emitters
-  emitters.forEach(e => drawEmitter(e));
-
-  // 4. Draw Jet
-  if (jetPosLatLng) drawJet();
-
-  // 5. Draw Active Detection Links
-  if (jetPosLatLng && activeDetections.length > 0) {
-    const jPt = map.latLngToContainerPoint(jetPosLatLng);
-    ctx.lineWidth = 1;
-    ctx.setLineDash([4, 4]);
-    activeDetections.forEach(ll => {
-      const tgPt = map.latLngToContainerPoint(ll);
-      ctx.beginPath();
-      ctx.moveTo(jPt.x, jPt.y);
-      ctx.lineTo(tgPt.x, tgPt.y);
-
-      const grad = ctx.createLinearGradient(jPt.x, jPt.y, tgPt.x, tgPt.y);
-      grad.addColorStop(0, 'rgba(0, 212, 255, 0.8)');
-      grad.addColorStop(1, 'rgba(0, 255, 65, 0)');
-      ctx.strokeStyle = grad;
-      ctx.stroke();
-    });
-    ctx.setLineDash([]);
-  }
-}
-
-function drawRadar(r, idx) {
-  const pt = map.latLngToContainerPoint(r.latlng);
-  // Don't draw if completely off screen to save perf
-  if (pt.x < -1000 || pt.x > canvas.width + 1000 || pt.y < -1000 || pt.y > canvas.height + 1000) return;
-
-  const radiusPx = getRadiusPx(r.rangeKm, r.latlng);
-
-  // Range Ring
-  ctx.beginPath();
-  ctx.arc(pt.x, pt.y, radiusPx, 0, Math.PI * 2);
-  ctx.strokeStyle = DIM_GREEN;
-  ctx.lineWidth = 1.5;
-  ctx.stroke();
-
-  // Emitter Pulse Waves
-  const t = Date.now() / 1000;
-  // Use PRF to scale the visual ripple speed (e.g. 1000 Hz => 1 speed)
-  const pulseSpeed = r.prf ? r.prf / 1000 : 1;
-  const numRings = 3;
-  ctx.save();
-  for (let step = 0; step < numRings; step++) {
-    const phase = (t * pulseSpeed + step / numRings) % 1;
-    const currentRadius = radiusPx * phase;
-    const alpha = (1 - phase) * 0.6; // Fade out as it expands
-
-    ctx.beginPath();
-    ctx.arc(pt.x, pt.y, currentRadius, 0, Math.PI * 2);
-    ctx.strokeStyle = `rgba(0, 255, 65, ${alpha})`;
-    ctx.lineWidth = 2;
-    ctx.stroke();
-  }
-
-  // Icon (Diamond instead of Square)
-  ctx.shadowBlur = 15;
-  ctx.shadowColor = '#00ff41';
-  ctx.fillStyle = '#00ff41';
-  ctx.beginPath();
-  ctx.moveTo(pt.x, pt.y - 6);
-  ctx.lineTo(pt.x + 6, pt.y);
-  ctx.lineTo(pt.x, pt.y + 6);
-  ctx.lineTo(pt.x - 6, pt.y);
-  ctx.closePath();
-  ctx.fill();
-  ctx.restore();
-
-  // Label
-  ctx.fillStyle = '#00ff41';
-  ctx.font = '10px "Share Tech Mono"';
-  ctx.fillText(r.name, pt.x + 8, pt.y);
-  ctx.fillStyle = 'rgba(0,255,65,0.6)';
-  ctx.fillText(r.band.split(' ')[0], pt.x + 8, pt.y + 12);
-}
-
-function drawEmitter(e) {
-  const pt = map.latLngToContainerPoint(e.latlng);
-  if (pt.x < -100 || pt.x > canvas.width + 100 || pt.y < -100 || pt.y > canvas.height + 100) return;
-
-  // Pulse effect based on time
-  const t = Date.now() / 1000;
-  const pulseR = (Math.sin(t * 4) + 1) / 2;
-  const radiusPx = getRadiusPx(150, e.latlng); // hardcoded estimate range
-
-  ctx.beginPath();
-  ctx.arc(pt.x, pt.y, radiusPx * (0.2 + pulseR * 0.3), 0, Math.PI * 2);
-  ctx.strokeStyle = `rgba(255, 170, 0, ${0.1 + pulseR * 0.1})`;
-  ctx.lineWidth = 1;
-  ctx.stroke();
-
-  // Diamond shape
-  ctx.save();
-  ctx.shadowBlur = 15;
-  ctx.shadowColor = AMBER;
-  ctx.fillStyle = AMBER;
-  ctx.beginPath();
-  ctx.moveTo(pt.x, pt.y - 6);
-  ctx.lineTo(pt.x + 6, pt.y);
-  ctx.lineTo(pt.x, pt.y + 6);
-  ctx.lineTo(pt.x - 6, pt.y);
-  ctx.closePath();
-  ctx.fill();
-  ctx.restore();
-
-  // Label
-  ctx.fillStyle = AMBER;
-  ctx.font = '10px "Share Tech Mono"';
-  ctx.fillText(`UNKN-${String(e.id).padStart(2, '0')}`, pt.x + 10, pt.y);
-}
-
-function drawJet() {
-  const pt = map.latLngToContainerPoint(jetPosLatLng);
-
-  ctx.save();
-  ctx.translate(pt.x, pt.y);
-  ctx.rotate(jetAngle); // Use simple screen angle (radians)
-
-  // Dynamic scaling based on zoom
-  const zoomScale = Math.max(0.5, Math.pow(1.5, map.getZoom() - 5));
-  ctx.scale(zoomScale, zoomScale);
-
-  // Sensor Collection Cone (spread facing forward)
-  const conePx = 50; 
-  ctx.beginPath();
-  ctx.moveTo(0, 0);
-  ctx.arc(0, 0, conePx, -0.6, 0.6);
-  ctx.closePath();
-  ctx.fillStyle = 'rgba(0, 212, 255, 0.08)';
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(0, 212, 255, 0.4)';
-  ctx.lineWidth = 1 / zoomScale; // Keep stroke width constant
-  ctx.stroke();
-
-  // Jet Body Vector Path
-  const jetColor = document.getElementById('jet-color') ? document.getElementById('jet-color').value : CYAN;
-  ctx.shadowBlur = 10; ctx.shadowColor = jetColor; ctx.fillStyle = jetColor;
-  ctx.beginPath();
-  ctx.moveTo(12, 0); 
-  ctx.lineTo(6, 3);
-  ctx.lineTo(2, 3); 
-  ctx.lineTo(-4, 12); 
-  ctx.lineTo(-7, 12); 
-  ctx.lineTo(-3, 3);
-  ctx.lineTo(-9, 2); 
-  ctx.lineTo(-12, 6); 
-  ctx.lineTo(-14, 6); 
-  ctx.lineTo(-12, 0); 
-  ctx.lineTo(-14, -6);
-  ctx.lineTo(-12, -6);
-  ctx.lineTo(-9, -2);
-  ctx.lineTo(-3, -3);
-  ctx.lineTo(-7, -12);
-  ctx.lineTo(-4, -12);
-  ctx.lineTo(2, -3);
-  ctx.lineTo(6, -3);
-  ctx.closePath();
-  ctx.fill();
-
-  // Draw some simple glass for the cockpit
-  ctx.shadowBlur = 0;
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-  ctx.beginPath();
-  ctx.moveTo(8, 0);
-  ctx.lineTo(5, 2);
-  ctx.lineTo(2, 1);
-  ctx.lineTo(2, -1);
-  ctx.lineTo(5, -2);
-  ctx.closePath();
-  ctx.fill();
-
-  ctx.restore();
-}
-
-function animLoop() {
-  // Update animations (e.g. pulse waves) via constant re-render
-  // Emitter targets use continuous circular emission without specific directional sweep updates
-  drawCanvas();
-  requestAnimationFrame(animLoop);
+  // Empty stub for legacy calls that triggered synchronous canvas redraws
 }
 
 // ═══════════════════════════════════════════
@@ -647,7 +581,7 @@ function launchSortie() {
   document.getElementById('btn-launch').style.display = 'none';
   document.getElementById('btn-abort').style.display = 'block';
   setMode('pan'); // Force pan during flight
-  map.setView(routeLatLngs[0], map.getZoom()); // jump to start
+  map.jumpTo({ center: routeLatLngs[0], zoom: map.getZoom() }); // jump to start
 
   addLog('▶▶▶ SORTIE AUTHORIZED. RC-135V TAKEOFF.');
 
@@ -655,7 +589,7 @@ function launchSortie() {
   const segments = [];
   let totalKm = 0;
   for (let i = 0; i < routeLatLngs.length - 1; i++) {
-    const d = routeLatLngs[i].distanceTo(routeLatLngs[i + 1]) / 1000; // Leaflet distance is meters
+    const d = getDistanceKm(routeLatLngs[i], routeLatLngs[i + 1]);
     segments.push({ from: routeLatLngs[i], to: routeLatLngs[i + 1], dist: d, cumDist: totalKm });
     totalKm += d;
   }
@@ -696,20 +630,20 @@ function launchSortie() {
     // Interpolate LatLng
     const lat = currSeg.from.lat + (currSeg.to.lat - currSeg.from.lat) * t;
     const lng = currSeg.from.lng + (currSeg.to.lng - currSeg.from.lng) * t;
-    jetPosLatLng = L.latLng(lat, lng);
+    jetPosLatLng = new maplibregl.LngLat(lng, lat);
 
     // Calculate Jet Angle (bearing as rads for canvas)
-    const pF = map.latLngToContainerPoint(currSeg.from);
-    const pT = map.latLngToContainerPoint(currSeg.to);
+    const pF = map.project(currSeg.from);
+    const pT = map.project(currSeg.to);
     jetAngle = Math.atan2(pT.y - pF.y, pT.x - pF.x);
 
-    const jPt = map.latLngToContainerPoint(jetPosLatLng); // Jet current screen coord
+    const jPt = map.project(jetPosLatLng); // Jet current screen coord
 
     // Intersection Logic: Screen-space pixel map bounds
     radars.forEach((r, i) => {
       if (detectedRadars.has(i)) return;
 
-      const rPt = map.latLngToContainerPoint(r.latlng);
+      const rPt = map.project(r.latlng);
       const rRadiusPx = getRadiusPx(r.rangeKm, r.latlng);
       const cPx = 50; // Jet cone length
 
@@ -734,7 +668,7 @@ function launchSortie() {
     emitters.forEach((e, i) => {
       if (detectedEmitters.has(i)) return;
 
-      const ePt = map.latLngToContainerPoint(e.latlng);
+      const ePt = map.project(e.latlng);
       // Unknown emitters have no visible tracking radius on the map.
       // Therefore, the Jet's cone (cPx) must touch the physical point itself.
       const eRadiusPx = 0;
@@ -846,6 +780,7 @@ function clearAll() {
   radarAngles = {};
   collectedSignals = [];
   activeDetections = [];
+  jetPosLatLng = null;
 
   document.getElementById('radar-count').textContent = '0';
   document.getElementById('emitter-count').textContent = '0';
@@ -857,7 +792,7 @@ function clearAll() {
 
   updateEmitterLibraryUI();
   addLog('SYSTEM PURGED. MAP CLEARED.');
-  drawCanvas();
+  window.needsStaticUpdate = true;
 }
 
 // ═══════════════════════════════════════════

@@ -7,8 +7,8 @@
   <!-- Google Fonts -->
   <!-- Google Fonts -->
   <link rel="stylesheet" href="lib/fonts/fonts.css" />
-  <!-- Leaflet CSS -->
-  <link rel="stylesheet" href="lib/leaflet/leaflet.css" />
+  <!-- MapLibre GL CSS -->
+  <link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet" />
   <!-- Custom CSS -->
   <link rel="stylesheet" href="style.css">
 </head>
@@ -64,10 +64,9 @@
     <div id="sortie-progress-fill"></div>
   </div>
 
-  <!-- MAP & CANVAS CONTAINER -->
+  <!-- MAP CONTAINER -->
   <div id="view-container">
     <div id="leaflet-map"></div>
-    <canvas id="overlay-canvas"></canvas>
   </div>
 
   <!-- RIGHT PANELS -->
@@ -199,8 +198,8 @@
     </div>
   </div>
 
-  <!-- Leaflet JS -->
-  <script src="lib/leaflet/leaflet.js"></script>
+  <!-- MapLibre GL JS -->
+  <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
   <!-- App JS -->
   <script src="app.js"></script>
 </body>

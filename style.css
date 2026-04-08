@@ -39,12 +39,7 @@ html, body {
 
 /* CRT EFFECTS REDUCED FOR SHARPNESS */
 #crt-scanlines {
-  position: fixed;
-  inset: 0;
-  background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.1) 50%);
-  background-size: 100% 4px;
-  z-index: 9999;
-  pointer-events: none;
+  display: none;
 }
 #crt-noise {
   display: none; /* Removed for sharpness */
@@ -52,7 +47,7 @@ html, body {
 #crt-vignette {
   position: fixed;
   inset: 0;
-  background: radial-gradient(circle, transparent 70%, rgba(0,0,0,0.6) 100%);
+  background: radial-gradient(circle, transparent 80%, rgba(0,0,0,0.4) 100%);
   z-index: 9997;
   pointer-events: none;
 }
@@ -75,10 +70,7 @@ html, body {
   height: 100%;
 }
 
-/* Using default CartoDB Dark tiles for maximum sharpness */
-.leaflet-container {
-  background: #020a04;
-}
+
 
 #overlay-canvas {
   position: absolute;
